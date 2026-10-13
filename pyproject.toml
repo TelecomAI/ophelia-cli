@@ -1,0 +1,40 @@
+
+[project]
+name = "ophelia-cli"
+version = "0.1.0"
+description = "A cli AI coding assistant."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain",
+    "langgraph",
+    "rich",
+    "prompt-toolkit",
+    "pydantic-settings",
+    "python-dotenv",
+]
+
+[project.scripts]
+ophelia = "src.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
