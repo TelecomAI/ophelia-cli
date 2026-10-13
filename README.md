@@ -4,6 +4,10 @@
 [![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/uv-261230?style=for-the-badge&logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
 
+<p align="center">
+  <img src="docs/assets/logo-standard.png" alt="Ophelia Logo"/>
+</p>
+
 Ophelia is an AI coding assistant that lives directly in your terminal. It helps you work with your codebase through natural language commands, with the goal of simplifying code editing, test execution, and development workflows — all from your command line.
 
 <p align="center">
