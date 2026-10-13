@@ -50,7 +50,7 @@ Once you have repository access, set up your local development environment.
 ### Prerequisites
 
 - Python 3.12 or later
-- [UV](https://docs.astral.sh/uv/getting-started/installation/)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - Git
 
 ### Set up the project
