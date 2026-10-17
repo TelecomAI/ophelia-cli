@@ -103,7 +103,7 @@ Use the `/bug` command directly within Ophelia to report issues, or [open an iss
 
 ## Connect on Discord
 
-Join the [Telecom AI community on Discord](https://discord.gg/eWtE472wVr) to get help, share ideas, discuss Ophelia, and connect with other developers building with AI.
+Join the [Telecom AI community on Discord](https://discord.gg/vK66ZwrS4T) to get help, share ideas, discuss Ophelia, and connect with other developers building with AI.
 
 ## Contributing
 
