@@ -8,7 +8,7 @@
   <img src="docs/assets/logo-standard.png" alt="Ophelia Logo"/>
 </p>
 
-Ophelia is an AI coding assistant that lives directly in your terminal. It helps you work with your codebase through natural language commands, with the goal of simplifying code editing, test execution, and development workflows — all from your command line.
+Ophelia is an AI coding assistant that lives directly in your terminal. It helps you work with your codebase through natural language commands, with the goal of simplifying code editing, test execution, and development workflows. All from your command line.
 
 <p align="center">
   <img src="docs/assets/app-preview.png" alt="Ophelia CLI preview" width="700" />
