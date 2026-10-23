@@ -6,11 +6,8 @@ description = "A cli AI coding assistant."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "langchain",
-    "langgraph",
     "rich",
     "prompt-toolkit",
-    "pydantic-settings",
     "python-dotenv",
 ]
 
