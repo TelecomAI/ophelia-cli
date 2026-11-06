@@ -4,7 +4,7 @@ name = "ophelia-cli"
 version = "0.1.0"
 description = "A cli AI coding assistant."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "rich",
     "prompt-toolkit",
@@ -30,7 +30,7 @@ packages = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
