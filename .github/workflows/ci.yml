@@ -1,0 +1,70 @@
+name: CI/CD
+
+on:
+  # Any branch push (feature/bug/fix, dev merges, and main merges from dev)
+  push:
+  # PRs into dev (feature -> dev) and into main (dev -> main)
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Only dev may be merged into main
+  guard-main:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only dev can be merged into main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
+            echo "::error::Only the 'dev' branch can be merged into 'main' (got '$HEAD_REF')."
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Format check
+        run: uv run ruff format --check .
+      - name: Tests
+        run: |
+          if [ -d tests ]; then uv run pytest; else echo "No tests directory yet, skipping."; fi
+      - name: Build package
+        run: uv build
+
+  # After a merge into dev
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Deploy/pre-release step for dev goes here."
+
+  # After dev is merged into main
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Production release/publish step goes here."
