@@ -32,7 +32,7 @@ async def run_bash(command: str, timeout: int = 30, max_output: int = 2000) -> s
     """Run a bash command with a timeout and return combined stdout/stderr"""
 
     if not isinstance(timeout, int) or timeout < 0:
-        raise ValueError("The timeout parameter of run_bash tool must be a positif integer")
+        raise ValueError("The timeout parameter of run_bash tool must be a positive integer")
 
     if command:
         import asyncio
