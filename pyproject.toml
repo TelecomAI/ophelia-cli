@@ -9,6 +9,7 @@ dependencies = [
     "rich",
     "prompt-toolkit",
     "python-dotenv",
+    "pytest>=9.1.1",
 ]
 
 [project.scripts]
