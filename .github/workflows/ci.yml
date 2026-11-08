@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: echo "Deploy/pre-release step for dev goes here."
 
   # After dev is merged into main
@@ -69,5 +69,5 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: echo "Production release/publish step goes here."
