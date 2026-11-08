@@ -6,6 +6,7 @@ on:
   # PRs into dev (feature -> dev) and into main (dev -> main)
   pull_request:
     branches: [dev, main]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -34,9 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           enable-cache: true
+          version: "0.13.7"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: uv python install 3.12
       - run: uv sync --frozen
       - name: Lint
