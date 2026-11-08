@@ -47,6 +47,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "prompt-toolkit" },
+    { name = "pytest" },
     { name = "python-dotenv" },
     { name = "rich" },
 ]
@@ -61,6 +62,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "prompt-toolkit" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "python-dotenv" },
     { name = "rich" },
 ]
