@@ -36,7 +36,7 @@ def edit_file_sync(file_path: str, old_string: str, new_string: str):
             if c == 0:
                 return "Error: The old string isn't in the file."
             if c > 1:
-                return "Error: The old string was find more than one time."
+                return "Error: The old string was found more than one time."
             s = s.replace(old_string, new_string)
             f.seek(0)
             f.write(s)
