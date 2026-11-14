@@ -25,7 +25,7 @@ SCHEMA = {
     },
 }
 
-async def edit_file(file_path: str, old_string: str, new_string: str):
+def edit_file_sync(file_path: str, old_string: str, new_string: str):
     try:
         f=open(file_path,"r+",encoding="utf-8")
     except (FileNotFoundError, PermissionError, IsADirectoryError) as e:
@@ -48,3 +48,6 @@ async def edit_file(file_path: str, old_string: str, new_string: str):
     f.close()
     return "The old string was succesfully replaced by the new one in the file."
 
+async def edit_file(file_path: str, old_string: str, new_string: str):
+    import asyncio
+    return await asyncio.to_thread(edit_file_sync, file_path, old_string, new_string)
