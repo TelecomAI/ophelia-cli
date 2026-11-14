@@ -27,25 +27,22 @@ SCHEMA = {
 
 def edit_file_sync(file_path: str, old_string: str, new_string: str):
     try:
-        f=open(file_path,"r+",encoding="utf-8")
+        with open(file_path,"r+",encoding="utf-8") as f:
+            if not old_string:
+                return "Error: The old string can't be empty."
+            s=f.read()
+            c=s.count(old_string)
+            if c==0:
+                return "Error: The old string isn't in the file."
+            if c>1:
+                return "Error: The old string was find more than one time."
+            s=s.replace(old_string,new_string)
+            f.seek(0)
+            f.write(s)
+            f.truncate()
+            f.close()
     except (FileNotFoundError, PermissionError, IsADirectoryError) as e:
         return f"Error: {e}."
-    if not old_string:
-        f.close()
-        return "Error: The old string can't be empty."
-    s=f.read()
-    c=s.count(old_string)
-    if c==0:
-        f.close()
-        return "Error: The old string isn't in the file."
-    if c>1:
-        f.close()
-        return "Error: The old string was find more than one time."
-    s=s.replace(old_string,new_string)
-    f.seek(0)
-    f.write(s)
-    f.truncate()
-    f.close()
     return "The old string was succesfully replaced by the new one in the file."
 
 async def edit_file(file_path: str, old_string: str, new_string: str):
