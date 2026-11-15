@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 
 from src.tools.write_file import write_file
 
