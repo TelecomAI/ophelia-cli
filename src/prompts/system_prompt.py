@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
+from src.tools import run_bash as run_bash_tool
+
 PROMPT_DIR = Path(__file__).parent
 TOOL_GUIDELINES_DIR = PROMPT_DIR / "tools"
 
@@ -70,12 +72,16 @@ class Environment:
 
 
 def default_shell() -> str:
-    """Return the shell that runs the agent's commands.
+    """Return the shell that the run_bash tool runs commands in.
 
-    The run_bash tool starts commands with ``asyncio.create_subprocess_shell``, which
-    uses ``COMSPEC`` (usually ``cmd.exe``) on Windows and ``/bin/sh`` everywhere else.
-    Telling the model which one it gets lets it write commands that actually work.
+    run_bash uses bash when it finds bash on the PATH (its ``BASH_PATH``). Otherwise
+    ``asyncio.create_subprocess_shell`` falls back to the system's default shell:
+    ``COMSPEC`` (usually ``cmd.exe``) on Windows, and ``/bin/sh`` everywhere else.
+    Telling the model which one it gets lets it write commands that actually work, and
+    reading ``BASH_PATH`` from the tool itself keeps the two from drifting apart.
     """
+    if run_bash_tool.BASH_PATH:
+        return run_bash_tool.BASH_PATH
     if os.name == "nt":
         return os.environ.get("COMSPEC", "cmd.exe")
     return "/bin/sh"

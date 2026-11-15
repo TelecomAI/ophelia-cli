@@ -11,7 +11,7 @@ Ophelia needs instructions that make the model behave like a careful coding assi
 The placeholder prompt in `src/agent.py`, on the `feat/8-add-events` branch, was a starting point taken from Owain Lewis' nano-agent, according to the issue. It had problems:
 
 - It described tools Ophelia doesn't have ("searching for files, listing directories"). A model told that a tool exists may try to call it.
-- It said nothing about the user's machine. For example, the model couldn't know that commands run in `cmd.exe` on Windows.
+- It said nothing about the user's machine. For example, the model couldn't know which shell runs its commands, or today's date.
 - It had no guidance on approvals, destructive commands, secrets, or prompt injection.
 
 ## How it works now
@@ -81,7 +81,7 @@ Each decision below gives the reason for it and where that reason comes from.
 6. **Tool advice only for tools that exist.** The main text never names a tool. Tool names appear only in the guidelines of tools the agent was given, so the prompt can't describe a tool the model can't call, which was the placeholder's main problem. Tests check this for every tool.
 7. **Tool definitions go through the API, not the prompt.** Tool names and parameters are sent in the API's `tools` field. The prompt only adds advice on using the tools. OpenAI's GPT-4.1 guide measured about 2% better results this way than with tools described inside the prompt. Anthropic's "Building effective agents" adds that tool descriptions deserve as much care as the prompt itself.
 8. **Nothing about calling several tools at once.** Groq doesn't support parallel tool calls for `openai/gpt-oss-20b`. Models that do support them, such as Claude, use them well without being asked, so saying nothing is correct for every model.
-9. **A runtime Environment section, placed last.** The model can't know the user's machine. The `run_bash` tool starts commands with `asyncio.create_subprocess_shell`, which uses `cmd.exe` on Windows and `/bin/sh` elsewhere, so the model needs the shell name to write commands that work. Every model also has a training cutoff, so it needs today's date. The section comes last because of prompt caching. Groq reuses a cached prompt only when its beginning matches exactly, so its docs recommend putting the parts that never change first and the changing parts last. Cached tokens cost 50% less and don't count toward Groq's rate limits.
+9. **A runtime Environment section, placed last.** The model can't know the user's machine. The `run_bash` tool runs commands in bash when it finds bash on the `PATH`, and otherwise in the system's default shell: `cmd.exe` on Windows and `/bin/sh` elsewhere. The model needs to know which one to write commands that work, so the Environment section reports it, read from `run_bash` itself (`BASH_PATH`) so that the two can't drift apart. Every model also has a training cutoff, so it needs today's date. The section comes last because of prompt caching. Groq reuses a cached prompt only when its beginning matches exactly, so its docs recommend putting the parts that never change first and the changing parts last. Cached tokens cost 50% less and don't count toward Groq's rate limits.
 10. **File contents and command output are treated as data.** This defends against prompt injection, which is text in a file or a command's output that tries to give the model orders. OpenAI's harmony format, which gpt-oss models were trained on, ranks tool messages lowest (system, developer, user, assistant, then tool), so this rule matches how the model was trained.
 11. **The prompt text lives in Markdown files.** That keeps prose out of Python code, GitHub shows it readably in pull requests, and the tool files can be included one by one. Codex and OpenCode also keep their prompts in separate files.
 12. **A new `src/prompts/` package instead of editing `src/agent.py`.** `agent.py` only exists on the unmerged `feat/8-add-events` branch, so editing it here would clash with that work. The agent only needs to import `build_system_prompt`.
@@ -106,14 +106,14 @@ To support more models, keep this shared prompt. Add small additions per model, 
 
 ## Validation
 
-**Unit tests** (`uv run python -m pytest tests/prompts`). There are 25 tests. They check that:
+**Unit tests** (`uv run python -m pytest tests/prompts`). There are 26 tests. They check that:
 
 - the main text names no tool, and the prompt mentions only the tools it was given;
 - every known tool has guidelines;
 - unknown or unsafe tool names (such as `../system_prompt`) are ignored;
 - tool order and duplicates don't change the prompt;
 - the Environment section is always last, and only that section changes between machines;
-- the shell is reported the way `run_bash` really runs commands, on Windows and elsewhere;
+- the shell reported is the one `run_bash` uses: bash when it finds it, otherwise the system's default shell;
 - the sections come in the designed order;
 - the prompt stays under 1,000 words;
 - no shouted words appear.
@@ -137,7 +137,7 @@ Results with `openai/gpt-oss-20b` on Groq, with 3 runs per scenario (`--runs 3`)
 | Doesn't retry a denied call | 2 of 3 | 3 of 3 |
 | **Total** | **11 of 12** | **12 of 12** |
 
-An earlier single run of the first version failed the denied-call scenario too, so the first version passed it in 2 of its 4 runs. The notes below count all 4 runs.
+An earlier single run of the first version failed the denied-call scenario too, so the first version passed it in 2 of its 4 runs. The notes below count all 4 runs. Every run in this section was made before #15 switched `run_bash` to bash, when the Environment section reported `cmd.exe` on Windows.
 
 What the first version's runs showed, and what we changed in response:
 
@@ -175,7 +175,7 @@ With 3 runs per scenario, a difference of one result is within normal variation,
   - `run_bash`: it accepts any timeout, even 10,000 seconds. A maximum in the tool itself would make that mistake impossible.
 - **`spawn_agent` guidelines are a first draft:** the owner of #6 should adjust them to the real tool.
 - **Tool descriptions are part of the prompt too:** for example, `edit_file`'s description could be clearer. That's up to each tool's owner.
-- **`run_bash` runs `cmd.exe` on Windows** despite its name. Because of this, two of its existing tests fail on Windows (they use `printf` and `;`). It's worth a separate issue.
+- **`run_bash` doesn't work on Windows yet.** Since #15, it passes bash to `asyncio.create_subprocess_shell` as the shell. On Windows, Python still builds the command line the `cmd.exe` way, as `<shell> /c "<command>"`, which bash can't run, so every command fails with exit code 127, with Git Bash and with WSL's `bash.exe` alike. Its timeout cleanup also uses `os.killpg` and `signal.SIGKILL`, which don't exist on Windows. It's worth its own issue.
 - **Future work:**
   - a shorter prompt for sub-agents (with #6);
   - short reminders that the agent loop adds to the conversation, which Claude Code does;

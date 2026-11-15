@@ -12,6 +12,7 @@ from src.prompts import (
     default_shell,
     tool_guidelines,
 )
+from src.tools import run_bash as run_bash_tool
 
 # The tools Ophelia has or is about to get. Each of them needs a guidelines file.
 KNOWN_TOOLS = ["edit_file", "read_file", "run_bash", "spawn_agent", "write_file"]
@@ -118,21 +119,34 @@ def test_detect_describes_the_current_machine() -> None:
     assert environment.operating_system
 
 
-def test_default_shell_on_windows_is_comspec(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_shell_is_bash_when_run_bash_finds_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_bash_tool, "BASH_PATH", "/usr/bin/bash")
+
+    assert default_shell() == "/usr/bin/bash"
+
+
+def test_default_shell_on_windows_without_bash_is_comspec(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
     monkeypatch.setattr(os, "name", "nt")
     monkeypatch.setenv("COMSPEC", "C:\\Windows\\system32\\cmd.exe")
 
     assert default_shell() == "C:\\Windows\\system32\\cmd.exe"
 
 
-def test_default_shell_on_windows_without_comspec(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_shell_on_windows_without_bash_or_comspec(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
     monkeypatch.setattr(os, "name", "nt")
     monkeypatch.delenv("COMSPEC", raising=False)
 
     assert default_shell() == "cmd.exe"
 
 
-def test_default_shell_elsewhere_is_sh(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_shell_elsewhere_without_bash_is_sh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
     monkeypatch.setattr(os, "name", "posix")
 
     assert default_shell() == "/bin/sh"
