@@ -54,18 +54,20 @@ async def run_bash(command: str, timeout: int = 30, max_output: int = 2000) -> s
         start_new_session=True,
     )
 
+    completed = False
     try:
         # this can throw a TimeoutError
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        completed = True
 
     except TimeoutError as exc:
         # we re-throw the error, cause the error catching logic must be handled elsewhere
         raise TimeoutError(f"Command {command!r} timed out after {timeout} seconds") from exc
     finally:
-        if proc.returncode is None:
+        if not completed:
             try:
-                # force kill the entire process group
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                # start_new_session=True sets PGID to proc.pid; os.getpgid() can fail once reaped
+                os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass  # there may be a chance that the process group already exited right as the timeout occurred
             await proc.communicate()
