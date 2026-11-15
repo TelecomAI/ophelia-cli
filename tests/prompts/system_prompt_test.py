@@ -140,7 +140,7 @@ def test_default_shell_elsewhere_is_sh(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_prompt_stays_within_its_size_budget() -> None:
     # Every word is sent again on every request. The main instructions are about 500
-    # words and the whole prompt about 800 with every tool, which leaves room for a few
+    # words and the whole prompt about 850 with every tool, which leaves room for a few
     # more tools. Raising this limit should be a deliberate decision, not something that
     # happens one sentence at a time.
     words = len(build_system_prompt(KNOWN_TOOLS, ENVIRONMENT).split())

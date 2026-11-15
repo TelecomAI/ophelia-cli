@@ -211,7 +211,7 @@ def describe(reply: dict) -> str:
     if call:
         return f"called {call[0]}({json.dumps(call[1])[:100]})"
     text = " ".join((reply.get("content") or "").split())
-    return f'replied "{text[:100]}"'
+    return f'replied "{text[:300]}"'
 
 
 def main() -> int:
