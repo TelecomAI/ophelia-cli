@@ -1,53 +1,76 @@
+import asyncio
+
 """
 Edit file command
 """
 
 SCHEMA = {
-    "name": "edit_file",
-    "description": "Edit a file like following: Replace old_string with new_string in the file. old_string must be unique.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "file_path": {
-                "type": "string",
-                "description": "the file path of the file to edit.",
+    "type": "function",
+    "function": {
+        "name": "edit_file",
+        "description": "Edit a file like following: Replace old_string with new_string in the file. old_string must be unique.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "the file path of the file to edit.",
+                },
+                "old_string": {
+                    "type": "string",
+                    "description": "old string to find and replace by the new one.",
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "new string to put in place of the old one.",
+                },
             },
-            "old_string": {
-                "type": "string",
-                "description": "old string to find and replace by the new one.",
-            },
-            "new_string": {
-                "type": "string",
-                "description": "new string to put in place of the old one.",
-            },
+            "required": ["file_path", "old_string", "new_string"],
         },
-        "required": ["file_path", "old_string", "new_string"],
     },
 }
 
 
-def edit_file_sync(file_path: str, old_string: str, new_string: str):
-    try:
-        with open(file_path, "r+", encoding="utf-8") as f:
-            if not old_string:
-                return "Error: The old string can't be empty."
-            s = f.read()
-            c = s.count(old_string)
-            if c == 0:
-                return "Error: The old string isn't in the file."
-            if c > 1:
-                return "Error: The old string was found more than one time."
-            s = s.replace(old_string, new_string)
-            f.seek(0)
-            f.write(s)
-            f.truncate()
-            f.close()
-    except (FileNotFoundError, PermissionError, IsADirectoryError) as e:
-        return f"Error: {e}."
+def _edit_file(file_path: str, old_string: str, new_string: str):
+    """Edit a file by replacing old_string with new_string. old_string must be unique.
+
+    Args:
+        file_path (str): path to the file
+        old_string (str): string to replace
+        new_string (str): replacement string
+
+    Returns:
+        str: success message
+    """
+    # check file path
+    if not isinstance(file_path, str):
+        raise TypeError("file_path must be a string")
+
+    # check old string
+    if not isinstance(old_string, str):
+        raise TypeError("old_string must be a string")
+    if not old_string:
+        raise ValueError("old_string can't be empty")
+
+    # check new string
+    if not isinstance(new_string, str):
+        raise TypeError("new_string must be a string")
+
+    with open(file_path, "r+", encoding="utf-8") as f:
+        s = f.read()
+        c = s.count(old_string)
+        if c == 0:
+            raise ValueError(f"old string not found in the file {file_path}")
+        if c > 1:
+            raise ValueError("old string must be unique")
+        s = s.replace(old_string, new_string)
+        f.seek(0)
+        f.write(s)
+        f.truncate()
+        f.close()
+
     return "The old string was succesfully replaced by the new one in the file."
 
 
 async def edit_file(file_path: str, old_string: str, new_string: str):
-    import asyncio
-
-    return await asyncio.to_thread(edit_file_sync, file_path, old_string, new_string)
+    return await asyncio.to_thread(_edit_file, file_path, old_string, new_string)
