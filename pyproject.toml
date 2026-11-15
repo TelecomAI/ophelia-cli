@@ -10,6 +10,7 @@ dependencies = [
     "prompt-toolkit",
     "python-dotenv",
     "pytest>=9.1.1",
+    "litellm>=1.109.1",
 ]
 
 [project.scripts]
