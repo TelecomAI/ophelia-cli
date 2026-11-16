@@ -181,9 +181,9 @@ def test_type_error_does_not_modify_file(tmp_path):
 
     assert f.read_text(encoding="utf-8") == "a"
 
+
 def test_preserves_crlf(tmp_path):
     f = tmp_path / "a.txt"
     f.write_bytes(b"a\r\nb\r\nc\r\n")
     _run(f, "b", "X")
     assert f.read_bytes() == b"a\r\nX\r\nc\r\n"
-
