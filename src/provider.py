@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-# import json
+import json
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import litellm
 from dotenv import load_dotenv
-
-# from litellm import acompletion
+from litellm import acompletion
 from pydantic import BaseModel
 
 litellm.suppress_debug_info = True
@@ -85,6 +84,7 @@ class ProviderResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     parsed: dict[str, Any] | BaseModel | None = None
     raw_message: dict[str, Any] = field(default_factory=dict)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -206,23 +206,98 @@ class Provider:
         json_schema: dict[str, Any] | type[BaseModel] | None,
     ) -> dict[str, Any] | type[BaseModel] | None:
         """Convert a JSON schema dict or Pydantic model into LiteLLM `response_format`."""
+        if json_schema is None:
+            return None
 
-        raise NotImplementedError
+        if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
+            return json_schema
+
+        if json_schema.get("type") == "json_schema":
+            return json_schema
+
+        return {
+            "type": "json_schema",
+            "json_schema": {"name": "response", "schema": json_schema, "strict": True},
+        }
 
     @staticmethod
     def _normalize_tools(
         tools: list[dict[str, Any]] | None,
     ) -> list[dict[str, Any]] | None:
         """Normalize tool schemas to OpenAI/LiteLLM `{"type": "function", ...}` format."""
-        raise NotImplementedError
+        if not tools:
+            return None
+        normalized: list[dict[str, Any]] = []
+        for tool in tools:
+            if tool.get("type") != "function" and "input_schema" in tool:
+                tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "parameters": tool["input_schema"],
+                    },
+                }
+            normalized.append(tool)
+        return normalized
 
     @staticmethod
     def _parse_response(
         response: Any,
         json_schema: dict[str, Any] | type[BaseModel] | None = None,
     ) -> ProviderResponse:
-        """Convert a LiteLLM `ModelResponse` into a standardized `ProviderResponse`"""
-        raise NotImplementedError
+        """Convert a LiteLLM `ModelResponse` into a standardized `ProviderResponse`."""
+        message = response.choices[0].message
+        content = message.content or ""
+
+        tool_calls = [
+            ToolCall(
+                id=tc.id,
+                name=tc.function.name,
+                arguments=json.loads(tc.function.arguments or "{}"),
+            )
+            for tc in (message.tool_calls or [])
+        ]
+
+        parsed = None
+        if json_schema is not None and content:
+            if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
+                parsed = json_schema.model_validate_json(content)
+            else:
+                parsed = json.loads(content)
+
+        return ProviderResponse(
+            content=content,
+            model=response.model,
+            tool_calls=tool_calls,
+            parsed=parsed,
+            raw_message=message.model_dump(),
+            usage=response.usage or {},
+        )
+
+    def _build_kwargs(
+        self,
+        messages: list[dict[str, Any]],
+        json_schema: dict[str, Any] | type[BaseModel] | None,
+        tools: list[dict[str, Any]] | None,
+        temperature: float | None,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Assemble `acompletion` kwargs, removing unset optional values."""
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "api_key": self.api_key,
+            **extra,
+        }
+        optional = {
+            "base_url": self.base_url,
+            "temperature": temperature,
+            "response_format": self._build_response_format(json_schema),
+            "tools": self._normalize_tools(tools),
+        }
+        kwargs.update({k: v for k, v in optional.items() if v is not None})
+        return kwargs
 
     async def complete(
         self,
@@ -233,8 +308,19 @@ class Provider:
         temperature: float | None = None,
         **kwargs: Any,
     ) -> ProviderResponse:
-        """Perform a single non-streaming LLM call."""
-        raise NotImplementedError
+        """Perform a single non-streaming LLM call.
+        Args:
+            messages: A list of message dicts to send to the LLM.
+            json_schema: Optional JSON schema or Pydantic model for response validation.
+            tools: Optional list of tool schemas.
+            temperature: Sampling temperature for the LLM.
+            **kwargs: Additional keyword arguments passed to the underlying LLM call.
+        """
+
+        response = await acompletion(
+            **self._build_kwargs(messages, json_schema, tools, temperature, stream=False, **kwargs)
+        )
+        return self._parse_response(response, json_schema=json_schema)
 
     async def stream(
         self,
@@ -245,5 +331,30 @@ class Provider:
         temperature: float | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamChunk]:
-        """Stream an LLM response chunk by chunk."""
-        raise NotImplementedError
+        """Stream an LLM response chunk by chunk.
+        Args:
+            messages: A list of message dicts to send to the LLM.
+            json_schema: Optional JSON schema or Pydantic model for response validation.
+            tools: Optional list of tool schemas.
+            temperature: Sampling temperature for the LLM.
+            **kwargs: Additional keyword arguments passed to the underlying LLM call.
+        """
+
+        stream_response = cast(
+            AsyncIterator[Any],
+            await acompletion(
+                **self._build_kwargs(
+                    messages, json_schema, tools, temperature, stream=True, **kwargs
+                )
+            ),
+        )
+
+        async for chunk in stream_response:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            content = delta.content or ""
+            reasoning = getattr(delta, "reasoning_content", None) or ""
+            finish_reason = choice.finish_reason
+            yield StreamChunk(content=content, reasoning=reasoning, finish_reason=finish_reason)
