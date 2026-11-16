@@ -69,7 +69,7 @@ def test_empty_new_string_deletes_text(tmp_path):
 
 def test_multiline_replacement(tmp_path):
     f = tmp_path / "a.txt"
-    f.write_text("line1\nline2\nline3\n", encoding="utf-8")
+    f.write_text("line1\nline2\nline3\n", encoding="utf-8", newline="\n")
 
     _run(f, "line2\nline3", "replaced")
 
