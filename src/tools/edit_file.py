@@ -57,7 +57,6 @@ def _edit_file(file_path: str, old_string: str, new_string: str):
         raise TypeError("new_string must be a string")
 
     with open(file_path, "r+", encoding="utf-8", newline="") as f:
-
         s = f.read()
         first = s.find(old_string)
         if first == -1:
