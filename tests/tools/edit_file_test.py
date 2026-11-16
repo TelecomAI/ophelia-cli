@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-MODULE_PATH = Path(__file__).resolve().parents[2] / "src" / "tools" / "edit-file.py"
+MODULE_PATH = Path(__file__).resolve().parents[2] / "src" / "tools" / "edit_file.py"
 
 
 def _load_module():
