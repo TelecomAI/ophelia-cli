@@ -24,7 +24,7 @@ async def assert_process_terminated(pid: int) -> None:
         if Path("/proc").is_dir():
             try:
                 stat = Path(f"/proc/{pid}/stat").read_text()
-            except FileNotFoundError:
+            except FileNotFoundError, ProcessLookupError:
                 return
             # The command name in parentheses may itself contain spaces or parentheses.
             if stat.rsplit(")", 1)[1].split()[0] == "Z":
