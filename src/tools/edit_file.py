@@ -56,13 +56,14 @@ def _edit_file(file_path: str, old_string: str, new_string: str):
     if not isinstance(new_string, str):
         raise TypeError("new_string must be a string")
 
-    with open(file_path, "r+", encoding="utf-8") as f:
+    with open(file_path, "r+", encoding="utf-8", newline="") as f:
+
         s = f.read()
-        c = s.count(old_string)
-        if c == 0:
-            raise ValueError(f"old string not found in the file {file_path}")
-        if c > 1:
-            raise ValueError("old string must be unique")
+        first = s.find(old_string)
+        if first == -1:
+            raise ValueError(f"old_string not found in the file {file_path}")
+        if s.find(old_string, first + 1) != -1:
+            raise ValueError("old_string must be unique")
         s = s.replace(old_string, new_string)
         f.seek(0)
         f.write(s)

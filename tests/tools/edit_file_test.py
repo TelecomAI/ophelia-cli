@@ -125,12 +125,12 @@ def test_old_string_not_unique_raises_and_leaves_file_intact(tmp_path):
 
 def test_overlapping_occurrences_are_counted_as_multiple(tmp_path):
     f = tmp_path / "a.txt"
-    f.write_text("aaaa", encoding="utf-8")
+    f.write_text("aaa", encoding="utf-8")
 
     with pytest.raises(ValueError, match="unique"):
         _run(f, "aa", "b")
 
-    assert f.read_text(encoding="utf-8") == "aaaa"
+    assert f.read_text(encoding="utf-8") == "aaa"
 
 
 def test_empty_old_string_raises(tmp_path):
@@ -180,3 +180,10 @@ def test_type_error_does_not_modify_file(tmp_path):
         _run(f, "a", None)
 
     assert f.read_text(encoding="utf-8") == "a"
+
+def test_preserves_crlf(tmp_path):
+    f = tmp_path / "a.txt"
+    f.write_bytes(b"a\r\nb\r\nc\r\n")
+    _run(f, "b", "X")
+    assert f.read_bytes() == b"a\r\nX\r\nc\r\n"
+
