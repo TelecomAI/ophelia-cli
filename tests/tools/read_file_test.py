@@ -105,7 +105,8 @@ def test_read_nonexistent_file(tmp_path):
 
 def test_read_directory_raises(tmp_path):
     """Test 8: Raise an error when the target path is a directory."""
-    with pytest.raises(IsADirectoryError):
+    # Windows reports PermissionError when opening a directory.
+    with pytest.raises((IsADirectoryError, PermissionError)):
         asyncio.run(read_file(str(tmp_path)))
 
 
