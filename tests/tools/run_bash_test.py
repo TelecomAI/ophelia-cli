@@ -1,12 +1,17 @@
 import asyncio
 import contextlib
+import ctypes
 import os
+import shlex
 import shutil
 import signal
+import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.tools import run_bash as run_bash_module
 from src.tools.run_bash import run_bash
 
 
@@ -24,11 +29,46 @@ async def assert_process_terminated(pid: int) -> None:
         if Path("/proc").is_dir():
             try:
                 stat = Path(f"/proc/{pid}/stat").read_text()
-            except FileNotFoundError:
+            except FileNotFoundError, ProcessLookupError:
                 return
             # The command name in parentheses may itself contain spaces or parentheses.
             if stat.rsplit(")", 1)[1].split()[0] == "Z":
                 return
+        assert asyncio.get_running_loop().time() < deadline, f"Process {pid} did not terminate"
+        await asyncio.sleep(0.02)
+
+
+def _is_windows_process_alive(pid: int) -> bool:
+    windll = getattr(ctypes, "windll", None)
+    if windll is None:
+        return False
+    from ctypes import wintypes
+
+    kernel32 = windll.kernel32
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return False
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+async def assert_windows_process_terminated(pid: int) -> None:
+    deadline = asyncio.get_running_loop().time() + 2
+    while _is_windows_process_alive(pid):
         assert asyncio.get_running_loop().time() < deadline, f"Process {pid} did not terminate"
         await asyncio.sleep(0.02)
 
@@ -93,6 +133,7 @@ async def test_run_bash_truncates_long_report() -> None:
     assert result == full_report[:max_output] + "\n [TRUNCATED]"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")
 @pytest.mark.asyncio
 async def test_run_bash_kills_child_processes_on_timeout(tmp_path: Path) -> None:
     pid_file = tmp_path / "grandchild.pid"
@@ -106,6 +147,7 @@ async def test_run_bash_kills_child_processes_on_timeout(tmp_path: Path) -> None
     await assert_process_terminated(grandchild_pid)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")
 @pytest.mark.asyncio
 async def test_run_bash_kills_child_processes_on_cancellation(tmp_path: Path) -> None:
     pid_file = tmp_path / "grandchild.pid"
@@ -129,6 +171,7 @@ async def test_run_bash_kills_child_processes_on_cancellation(tmp_path: Path) ->
     await assert_process_terminated(grandchild_pid)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")
 @pytest.mark.asyncio
 async def test_run_bash_kills_descendant_after_shell_exits_on_timeout(tmp_path: Path) -> None:
     pid_file = tmp_path / "pids.txt"
@@ -147,6 +190,7 @@ async def test_run_bash_kills_descendant_after_shell_exits_on_timeout(tmp_path: 
             os.kill(descendant_pid, signal.SIGKILL)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")
 @pytest.mark.asyncio
 async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation(tmp_path: Path) -> None:
     pid_file = tmp_path / "pids.txt"
@@ -184,6 +228,137 @@ async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation(tmp_p
     finally:
         with contextlib.suppress(ProcessLookupError):
             os.kill(descendant_pid, signal.SIGKILL)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only Job Object cleanup tests")
+@pytest.mark.asyncio
+async def test_run_bash_kills_descendant_after_shell_exits_on_timeout_windows(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "win_pids.txt"
+    child_code = "import time; time.sleep(30)"
+    launcher_code = (
+        "import os, pathlib, subprocess, sys; "
+        f"p = subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"pathlib.Path({pid_file.as_posix()!r}).write_text(f'{{os.getpid()}} {{p.pid}}\\n')"
+    )
+    cmd = f"{shlex.quote(Path(sys.executable).as_posix())} -c {shlex.quote(launcher_code)}"
+
+    with pytest.raises(TimeoutError):
+        await run_bash(cmd, timeout=1)
+
+    _, descendant_pid_str = pid_file.read_text().strip().split()
+    await assert_windows_process_terminated(int(descendant_pid_str))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only Job Object cleanup tests")
+@pytest.mark.asyncio
+async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation_windows(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "win_pids.txt"
+    child_code = "import time; time.sleep(30)"
+    launcher_code = (
+        "import os, pathlib, subprocess, sys; "
+        f"p = subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"pathlib.Path({pid_file.as_posix()!r}).write_text(f'{{os.getpid()}} {{p.pid}}\\n')"
+    )
+    cmd = f"{shlex.quote(Path(sys.executable).as_posix())} -c {shlex.quote(launcher_code)}"
+
+    task = asyncio.create_task(run_bash(cmd, timeout=30))
+
+    launcher_pid: int | None = None
+    descendant_pid: int | None = None
+    for _ in range(100):
+        if pid_file.exists():
+            content = pid_file.read_text()
+            if "\n" in content:
+                launcher_pid_str, descendant_pid_str = content.strip().split()
+                launcher_pid = int(launcher_pid_str)
+                descendant_pid = int(descendant_pid_str)
+                if not _is_windows_process_alive(launcher_pid):
+                    break
+        await asyncio.sleep(0.02)
+
+    assert launcher_pid is not None and descendant_pid is not None, (
+        "Child process did not start in time"
+    )
+    assert not _is_windows_process_alive(launcher_pid)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await assert_windows_process_terminated(descendant_pid)
+
+
+def test_find_bash_prefers_git_bash_over_wsl_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    git_dir = tmp_path / "Git"
+    git_exe = git_dir / "cmd" / "git.exe"
+    git_bash = git_dir / "bin" / "bash.exe"
+    git_exe.parent.mkdir(parents=True)
+    git_bash.parent.mkdir(parents=True)
+    git_exe.write_text("")
+    git_bash.write_text("")
+
+    wsl_bash = r"C:\Users\dev\AppData\Local\Microsoft\WindowsApps\bash.exe"
+
+    monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        run_bash_module.shutil,
+        "which",
+        lambda name: str(git_exe) if name == "git" else wsl_bash,
+    )
+
+    assert run_bash_module._find_bash() == str(git_bash)
+
+
+@pytest.mark.asyncio
+async def test_run_bash_uses_exec_with_dash_c_when_bash_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_proc = MagicMock()
+    fake_proc.pid = 12345
+    fake_proc.returncode = 0
+    fake_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+
+    monkeypatch.setattr(run_bash_module, "BASH_PATH", "/custom/bin/bash")
+    monkeypatch.setattr(run_bash_module, "_attach_windows_job", lambda _pid: None)
+
+    with patch(
+        "src.tools.run_bash.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=fake_proc),
+    ) as mock_exec:
+        result = await run_bash("echo ok")
+
+    mock_exec.assert_awaited_once()
+    assert mock_exec.call_args.args == ("/custom/bin/bash", "-c", "echo ok")
+    assert "STDOUT:\nok" in result
+
+
+@pytest.mark.asyncio
+async def test_run_bash_falls_back_to_shell_when_bash_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_proc = MagicMock()
+    fake_proc.pid = 12345
+    fake_proc.returncode = 0
+    fake_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+
+    monkeypatch.setattr(run_bash_module, "BASH_PATH", None)
+    monkeypatch.setattr(run_bash_module, "_attach_windows_job", lambda _pid: None)
+
+    with patch(
+        "src.tools.run_bash.asyncio.create_subprocess_shell",
+        new=AsyncMock(return_value=fake_proc),
+    ) as mock_shell:
+        result = await run_bash("echo ok")
+
+    mock_shell.assert_awaited_once()
+    assert mock_shell.call_args.kwargs["cmd"] == "echo ok"
+    assert "STDOUT:\nok" in result
 
 
 @pytest.mark.parametrize("max_output", [0, -1, 1.5, "1"])
