@@ -297,15 +297,16 @@ async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation_windo
 async def test_kill_windows_descendants_snapshot_kills_orphan_after_parent_exits_windows(
     tmp_path: Path,
 ) -> None:
+    python_exe = getattr(sys, "_base_executable", sys.executable) or sys.executable
     pid_file = tmp_path / "orphan_pids.txt"
     child_code = "import time; time.sleep(30)"
     launcher_code = (
         "import pathlib, subprocess, sys; "
-        f"p = subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"p = subprocess.Popen([{python_exe!r}, '-c', {child_code!r}]); "
         f"pathlib.Path({pid_file.as_posix()!r}).write_text(f'{{p.pid}}\\n')"
     )
     launcher = await asyncio.create_subprocess_exec(
-        sys.executable,
+        python_exe,
         "-c",
         launcher_code,
         creationflags=run_bash_module._CREATE_SUSPENDED,

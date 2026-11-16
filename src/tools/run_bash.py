@@ -370,6 +370,11 @@ def _kill_windows_descendants_snapshot(pid: int, root_start_time: int | None) ->
     )
     if root_handle:
         actual_root_start = _get_handle_creation_time(win32, int(root_handle))
+        exit_code = win32.DWORD()
+        root_alive = (
+            win32.kernel32.GetExitCodeProcess(root_handle, ctypes.byref(exit_code))
+            and exit_code.value == _STILL_ACTIVE
+        )
         if (
             root_start_time is not None
             and actual_root_start is not None
@@ -377,6 +382,8 @@ def _kill_windows_descendants_snapshot(pid: int, root_start_time: int | None) ->
         ):
             # `pid` exited and was recycled by an unrelated newer process.
             max_root_child_start = actual_root_start
+            win32.kernel32.CloseHandle(root_handle)
+        elif not root_alive:
             win32.kernel32.CloseHandle(root_handle)
         else:
             handles_to_kill.append(int(root_handle))
