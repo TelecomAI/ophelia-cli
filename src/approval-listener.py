@@ -1,12 +1,27 @@
-def approval_listener():
-    answer = input("Do you approve? (yes/no): ")
+from prompt_toolkit.shortcuts import radiolist_dialog
 
-    if answer == "yes":
+
+def approval_listener(tool_name, arguments):
+    answer = radiolist_dialog(
+        title="Permission required",
+        text=f"Tool: {tool_name}\nArguments: {arguments}\n\nDo you approve this action?",
+        values=[
+            (True, "Yes"),
+            (False, "No")
+        ],
+        default=False
+    ).run()
+
+    if answer is True:
         return True
     else:
         return False
 
+
 # Test the listener independently before integrating it into OPHELIA
 if __name__ == "__main__":
-    result = approval_listener()
+    result = approval_listener(
+        "run_bash",
+        {"command": "rm old_cache.txt"}
+    )
     print("Permission granted:", result)
