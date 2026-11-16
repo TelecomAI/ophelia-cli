@@ -152,17 +152,11 @@ class Provider:
         if api_key is not None and not clean_api_key:
             raise ValueError("api_key cannot be empty.")
 
-        model_provider = None
-        if clean_model and "/" in clean_model:
-            model_provider = clean_model.split("/", 1)[0].lower()
-            if clean_provider and clean_provider != model_provider:
-                raise ValueError(
-                    f"Conflicting provider {clean_provider!r} and model prefix {model_provider!r}."
-                )
-
-        resolved_provider = clean_provider or model_provider
+        resolved_provider = clean_provider
         if not resolved_provider and clean_api_key:
             resolved_provider = cls.detect_provider_from_key(clean_api_key)
+        if not resolved_provider and clean_model and "/" in clean_model:
+            resolved_provider = clean_model.split("/", 1)[0].lower()
         if not resolved_provider:
             for key_provider, config in PROVIDER_CONFIGS.items():
                 if os.environ.get(config.env_var, "").strip():
@@ -195,10 +189,10 @@ class Provider:
                     "please specify `model`."
                 )
             normalized_model = config.default_model
-        elif "/" not in clean_model:
-            normalized_model = f"{resolved_provider}/{clean_model}"
-        else:
+        elif clean_model.lower().startswith(f"{resolved_provider}/"):
             normalized_model = clean_model
+        else:
+            normalized_model = f"{resolved_provider}/{clean_model}"
 
         return resolved_provider, normalized_model, resolved_api_key
 
@@ -218,7 +212,7 @@ class Provider:
 
         return {
             "type": "json_schema",
-            "json_schema": {"name": "response", "schema": json_schema, "strict": True},
+            "json_schema": {"name": "response", "schema": json_schema, "strict": False},
         }
 
     @staticmethod
@@ -376,18 +370,20 @@ class Provider:
 
             finish_reason = choice.finish_reason
 
-            assembled_calls = (
-                [
-                    ToolCall(
-                        id=entry["id"],
-                        name=entry["name"],
-                        arguments=json.loads(entry["arguments"] or "{}"),
-                    )
-                    for _, entry in sorted(pending_tools.items())
-                ]
-                if finish_reason is not None and pending_tools
-                else []
-            )
+            assembled_calls: list[ToolCall] = []
+            if finish_reason is not None and finish_reason != "length" and pending_tools:
+                try:
+                    assembled_calls = [
+                        ToolCall(
+                            id=entry["id"],
+                            name=entry["name"],
+                            arguments=json.loads(entry["arguments"] or "{}"),
+                        )
+                        for _, entry in sorted(pending_tools.items())
+                    ]
+                except json.JSONDecodeError:
+                    if finish_reason == "tool_calls":
+                        raise
 
             yield StreamChunk(
                 content=delta.content or "",

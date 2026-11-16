@@ -176,9 +176,25 @@ def test_init_rejects_empty_api_key(bad_key: str) -> None:
         Provider(api_key=bad_key, provider="openai")
 
 
-def test_init_rejects_conflicting_provider_and_model_prefix() -> None:
-    with pytest.raises(ValueError, match="Conflicting provider"):
-        Provider(api_key="sk-123", provider="openai", model="anthropic/claude-sonnet-4-5")
+def test_init_prepends_provider_to_vendor_qualified_model_from_key() -> None:
+    provider = Provider(api_key="gsk_test", model="openai/gpt-oss-20b")
+
+    assert provider.provider == "groq"
+    assert provider.model == "groq/openai/gpt-oss-20b"
+
+
+def test_init_prepends_explicit_provider_to_vendor_qualified_model() -> None:
+    provider = Provider(api_key="gsk_test", provider="groq", model="openai/gpt-oss-20b")
+
+    assert provider.provider == "groq"
+    assert provider.model == "groq/openai/gpt-oss-20b"
+
+
+def test_init_does_not_double_prefix_provider_qualified_model() -> None:
+    provider = Provider(api_key="gsk_test", provider="groq", model="groq/openai/gpt-oss-120b")
+
+    assert provider.provider == "groq"
+    assert provider.model == "groq/openai/gpt-oss-120b"
 
 
 def test_init_fails_when_provider_cannot_be_determined() -> None:
@@ -223,7 +239,7 @@ def test_build_response_format_wraps_raw_schema_dict() -> None:
 
     assert result == {
         "type": "json_schema",
-        "json_schema": {"name": "response", "schema": raw_schema, "strict": True},
+        "json_schema": {"name": "response", "schema": raw_schema, "strict": False},
     }
 
 
@@ -520,3 +536,35 @@ async def test_stream_assembles_multi_chunk_and_parallel_tool_calls() -> None:
         ToolCall(id="call_1", name="run_bash", arguments={"command": "ls"}),
         ToolCall(id="call_2", name="ping", arguments={}),
     ]
+
+
+async def test_stream_preserves_length_finish_reason_for_truncated_tool_arguments() -> None:
+    provider = Provider(api_key="sk-test", model="openai/gpt-4o-mini")
+    chunks = [
+        make_stream_chunk(
+            tool_calls=[
+                SimpleNamespace(
+                    index=0,
+                    id="call_1",
+                    function=SimpleNamespace(name="run_bash", arguments='{"command": "echo'),
+                )
+            ]
+        ),
+        make_stream_chunk(finish_reason="length"),
+    ]
+
+    with patch(
+        "src.provider.acompletion",
+        new=AsyncMock(return_value=async_iter(chunks)),
+    ):
+        collected = [
+            chunk
+            async for chunk in provider.stream(
+                [{"role": "user", "content": "run echo"}],
+                tools=[{"name": "run_bash", "input_schema": {"type": "object"}}],
+            )
+        ]
+
+    assert len(collected) == 2
+    assert collected[-1].finish_reason == "length"
+    assert collected[-1].tool_calls == []
