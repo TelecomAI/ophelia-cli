@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 
 SCHEMA = {
     "type": "function",
@@ -18,10 +17,12 @@ SCHEMA = {
                 },
                 "line_start": {
                     "type": "integer",
+                    "minimum": 1,
                     "description": "First line to read (1-indexed, inclusive).",
                 },
                 "line_end": {
                     "type": "integer",
+                    "minimum": 1,
                     "description": "Last line to read (1-indexed, inclusive).",
                 },
             },
@@ -31,32 +32,27 @@ SCHEMA = {
 }
 
 
-def _read_file_sync(
+def _read_file(
     file_path: str,
     line_start: int | None = None,
     line_end: int | None = None,
 ) -> str:
-    """Read content from a file synchronously, with optional 1-indexed line slicing."""
-    path = Path(file_path)
+    """Read a UTF-8 file, optionally selecting a 1-indexed inclusive line range."""
+    if not isinstance(file_path, str):
+        raise TypeError("file_path must be a string")
 
-    if not path.exists():
-        return f"Error: File '{file_path}' does not exist."
-    if not path.is_file():
-        return f"Error: '{file_path}' is a directory, not a file."
-
-    if line_start is not None and line_start < 1:
-        return "Error: line_start must be greater than or equal to 1."
+    bounds = (("line_start", line_start), ("line_end", line_end))
+    for name, value in bounds:
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+            raise TypeError(f"{name} must be an integer")
+    for name, value in bounds:
+        if value is not None and value < 1:
+            raise ValueError(f"{name} must be greater than or equal to 1")
     if line_start is not None and line_end is not None and line_end < line_start:
-        return "Error: line_end must be greater than or equal to line_start."
+        raise ValueError("line_end must be greater than or equal to line_start")
 
-    try:
-        content = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return f"Error: '{file_path}' is a binary file or not valid UTF-8."
-    except PermissionError:
-        return f"Error: Permission denied when reading '{file_path}'."
-    except OSError as exc:
-        return f"Error reading '{file_path}': {exc}"
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
 
     if line_start is None and line_end is None:
         return content
@@ -72,5 +68,5 @@ async def read_file(
     line_start: int | None = None,
     line_end: int | None = None,
 ) -> str:
-    """Read content from a file asynchronously."""
-    return await asyncio.to_thread(_read_file_sync, file_path, line_start, line_end)
+    """Read a UTF-8 file asynchronously, raising errors for invalid input or read failures."""
+    return await asyncio.to_thread(_read_file, file_path, line_start, line_end)

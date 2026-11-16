@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from src.tools.read_file import SCHEMA, read_file
 
 
@@ -57,44 +59,72 @@ def test_read_partial_line_bounds(tmp_path):
 
 
 def test_read_invalid_line_range(tmp_path):
-    """Test 6: Return an error message when line bounds are invalid."""
+    """Test 6: Raise an error when line bounds are invalid."""
     file_path = tmp_path / "lines.txt"
     file_path.write_text("line 1\nline 2\n", encoding="utf-8")
 
-    zero_start = asyncio.run(read_file(str(file_path), line_start=0))
-    inverted_range = asyncio.run(read_file(str(file_path), line_start=3, line_end=1))
+    with pytest.raises(ValueError, match="line_start"):
+        asyncio.run(read_file(str(file_path), line_start=0))
+    with pytest.raises(ValueError, match="line_end"):
+        asyncio.run(read_file(str(file_path), line_start=3, line_end=1))
 
-    assert "Error" in zero_start
-    assert "Error" in inverted_range
+
+@pytest.mark.parametrize("line_end", [0, -1])
+def test_read_invalid_line_end_without_start(tmp_path, line_end):
+    with pytest.raises(ValueError, match="line_end"):
+        asyncio.run(read_file(str(tmp_path / "file.txt"), line_end=line_end))
+
+
+@pytest.mark.parametrize(
+    ("bounds", "name"),
+    [
+        ({"line_start": "1"}, "line_start"),
+        ({"line_end": 1.5}, "line_end"),
+        ({"line_start": True}, "line_start"),
+        ({"line_end": False}, "line_end"),
+    ],
+)
+def test_read_invalid_line_bound_types(tmp_path, bounds, name):
+    with pytest.raises(TypeError, match=f"{name} must be an integer"):
+        asyncio.run(read_file(str(tmp_path / "file.txt"), **bounds))
+
+
+@pytest.mark.parametrize("file_path", [None, 123])
+def test_read_invalid_file_path_type(file_path):
+    with pytest.raises(TypeError, match="file_path"):
+        asyncio.run(read_file(file_path))
 
 
 def test_read_nonexistent_file(tmp_path):
-    """Test 7: Return an error message when the file does not exist."""
+    """Test 7: Raise an error when the file does not exist."""
     file_path = tmp_path / "does_not_exist.txt"
 
-    result = asyncio.run(read_file(str(file_path)))
-
-    assert "Error" in result
-    assert "does not exist" in result
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(read_file(str(file_path)))
 
 
-def test_read_directory_returns_error(tmp_path):
-    """Test 8: Return an error message when the target path is a directory."""
-    result = asyncio.run(read_file(str(tmp_path)))
-
-    assert "Error" in result
-    assert "directory" in result
+def test_read_directory_raises(tmp_path):
+    """Test 8: Raise an error when the target path is a directory."""
+    with pytest.raises(IsADirectoryError):
+        asyncio.run(read_file(str(tmp_path)))
 
 
-def test_read_binary_file_returns_error(tmp_path):
-    """Test 9: Return an error message for non-UTF-8 binary files."""
+def test_read_binary_file_raises(tmp_path):
+    """Test 9: Raise an error for non-UTF-8 binary files."""
     file_path = tmp_path / "image.bin"
     file_path.write_bytes(b"\x80\x81\x82\xff\x00")
 
-    result = asyncio.run(read_file(str(file_path)))
+    with pytest.raises(UnicodeDecodeError):
+        asyncio.run(read_file(str(file_path)))
 
-    assert "Error" in result
-    assert "UTF-8" in result
+
+def test_read_permission_error_propagates(tmp_path, monkeypatch):
+    def deny_read(*args, **kwargs):
+        raise PermissionError("access denied")
+
+    monkeypatch.setattr("builtins.open", deny_read)
+    with pytest.raises(PermissionError, match="access denied"):
+        asyncio.run(read_file(str(tmp_path / "file.txt")))
 
 
 def test_schema_contract():
@@ -107,3 +137,5 @@ def test_schema_contract():
         "line_start",
         "line_end",
     }
+    assert SCHEMA["function"]["parameters"]["properties"]["line_start"]["minimum"] == 1
+    assert SCHEMA["function"]["parameters"]["properties"]["line_end"]["minimum"] == 1
