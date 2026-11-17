@@ -3,7 +3,6 @@ import contextlib
 import ctypes
 import os
 import shlex
-import shutil
 import signal
 import sys
 from pathlib import Path
@@ -89,6 +88,7 @@ async def test_termination_check_accepts_unreaped_zombie() -> None:
         await asyncio.to_thread(os.waitpid, pid, 0)
 
 
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_returns_stdout_and_stderr() -> None:
     cmd = "printf 'standard output'; printf 'standard error' >&2"
@@ -97,6 +97,7 @@ async def test_run_bash_returns_stdout_and_stderr() -> None:
     assert result == expected_report(cmd, 0, "standard output", "standard error")
 
 
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_returns_output_when_command_fails() -> None:
     cmd = "printf 'command failed' >&2; exit 1"
@@ -117,12 +118,14 @@ async def test_run_bash_rejects_invalid_timeout(timeout: object) -> None:
         await run_bash("printf 'should not run'", timeout=timeout)  # type: ignore[arg-type]
 
 
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_reports_timeout() -> None:
     with pytest.raises(TimeoutError, match="timed out after 1 seconds"):
         await run_bash("sleep 2", timeout=1)
 
 
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_truncates_long_report() -> None:
     cmd = "printf 'abcdefghij'"
@@ -230,7 +233,10 @@ async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation(tmp_p
             os.kill(descendant_pid, signal.SIGKILL)
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only Job Object cleanup tests")
+@pytest.mark.skipif(
+    sys.platform != "win32" or run_bash_module.BASH_PATH is None,
+    reason="requires Windows and bash",
+)
 @pytest.mark.asyncio
 async def test_run_bash_kills_descendant_after_shell_exits_on_timeout_windows(
     tmp_path: Path,
@@ -251,7 +257,10 @@ async def test_run_bash_kills_descendant_after_shell_exits_on_timeout_windows(
     await assert_windows_process_terminated(int(descendant_pid_str))
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only Job Object cleanup tests")
+@pytest.mark.skipif(
+    sys.platform != "win32" or run_bash_module.BASH_PATH is None,
+    reason="requires Windows and bash",
+)
 @pytest.mark.asyncio
 async def test_run_bash_kills_descendant_after_shell_exits_on_cancellation_windows(
     tmp_path: Path,
@@ -331,7 +340,10 @@ async def test_kill_windows_descendants_snapshot_kills_orphan_after_parent_exits
                     win32.kernel32.CloseHandle(handle)
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only snapshot/fallback cleanup tests")
+@pytest.mark.skipif(
+    sys.platform != "win32" or run_bash_module.BASH_PATH is None,
+    reason="requires Windows and bash",
+)
 @pytest.mark.asyncio
 async def test_run_bash_delivers_timeout_when_job_unavailable_and_pipes_held_windows(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -643,7 +655,7 @@ async def test_run_bash_returns_no_command_message_for_whitespace_command() -> N
     assert await run_bash("   \n\t  ") == "No command is given"
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_supports_bash_syntax() -> None:
     cmd = "[[ 'hello' == h* ]] && printf 'bash works'"
