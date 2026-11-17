@@ -340,7 +340,7 @@ def test_parse_response_extracts_multiple_tool_calls() -> None:
 
 def test_parse_response_validates_pydantic_schema() -> None:
     resp = make_completion_response(content='{"answer": "42", "confidence": 0.95}')
-    parsed = Provider._parse_response(resp, json_schema=AnswerSchema)
+    parsed = Provider._parse_response(resp, output_schema=AnswerSchema)
 
     assert parsed.parsed == AnswerSchema(answer="42", confidence=0.95)
 
@@ -348,7 +348,7 @@ def test_parse_response_validates_pydantic_schema() -> None:
 def test_parse_response_parses_dict_schema() -> None:
     schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
     resp = make_completion_response(content='{"ok": true}')
-    parsed = Provider._parse_response(resp, json_schema=schema)
+    parsed = Provider._parse_response(resp, output_schema=schema)
 
     assert parsed.parsed == {"ok": True}
 
@@ -358,7 +358,7 @@ def test_parse_response_skips_schema_parsing_when_content_empty() -> None:
         content="",
         tool_calls=[make_tool_call("call_1", "run_bash", '{"command": "ls"}')],
     )
-    parsed = Provider._parse_response(resp, json_schema=AnswerSchema)
+    parsed = Provider._parse_response(resp, output_schema=AnswerSchema)
 
     assert parsed.parsed is None
     assert len(parsed.tool_calls) == 1
@@ -427,7 +427,7 @@ async def test_complete_sends_normalized_kwargs_and_parses_response() -> None:
     with patch("src.provider.acompletion", new=AsyncMock(return_value=fake_resp)) as mock_acomp:
         result = await provider.complete(
             [{"role": "user", "content": "go"}],
-            json_schema=AnswerSchema,
+            output_schema=AnswerSchema,
             tools=[{"name": "run_bash", "description": "run", "input_schema": {"type": "object"}}],
             temperature=0.2,
             max_tokens=128,

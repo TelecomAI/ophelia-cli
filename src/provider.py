@@ -198,21 +198,21 @@ class Provider:
 
     @staticmethod
     def _build_response_format(
-        json_schema: dict[str, Any] | type[BaseModel] | None,
+        output_schema: dict[str, Any] | type[BaseModel] | None,
     ) -> dict[str, Any] | type[BaseModel] | None:
         """Convert a JSON schema dict or Pydantic model into LiteLLM `response_format`."""
-        if json_schema is None:
+        if output_schema is None:
             return None
 
-        if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
-            return json_schema
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+            return output_schema
 
-        if json_schema.get("type") == "json_schema":
-            return json_schema
+        if output_schema.get("type") == "json_schema":
+            return output_schema
 
         return {
             "type": "json_schema",
-            "json_schema": {"name": "response", "schema": json_schema, "strict": False},
+            "json_schema": {"name": "response", "schema": output_schema, "strict": False},
         }
 
     @staticmethod
@@ -239,7 +239,7 @@ class Provider:
     @staticmethod
     def _parse_response(
         response: Any,
-        json_schema: dict[str, Any] | type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
     ) -> ProviderResponse:
         """Convert a LiteLLM `ModelResponse` into a standardized `ProviderResponse`."""
         message = response.choices[0].message
@@ -255,9 +255,9 @@ class Provider:
         ]
 
         parsed = None
-        if json_schema is not None and content:
-            if isinstance(json_schema, type) and issubclass(json_schema, BaseModel):
-                parsed = json_schema.model_validate_json(content)
+        if output_schema is not None and content:
+            if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+                parsed = output_schema.model_validate_json(content)
             else:
                 parsed = json.loads(content)
 
@@ -281,7 +281,7 @@ class Provider:
     def _build_kwargs(
         self,
         messages: list[dict[str, Any]],
-        json_schema: dict[str, Any] | type[BaseModel] | None,
+        output_schema: dict[str, Any] | type[BaseModel] | None,
         tools: list[dict[str, Any]] | None,
         temperature: float | None,
         **extra: Any,
@@ -296,7 +296,7 @@ class Provider:
         optional = {
             "base_url": self.base_url,
             "temperature": temperature,
-            "response_format": self._build_response_format(json_schema),
+            "response_format": self._build_response_format(output_schema),
             "tools": self._normalize_tools(tools),
         }
         kwargs.update({k: v for k, v in optional.items() if v is not None})
@@ -306,7 +306,7 @@ class Provider:
         self,
         messages: list[dict[str, Any]],
         *,
-        json_schema: dict[str, Any] | type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         tools: list[dict[str, Any]] | None = None,
         temperature: float | None = None,
         **kwargs: Any,
@@ -314,22 +314,24 @@ class Provider:
         """Perform a single non-streaming LLM call.
         Args:
             messages: A list of message dicts to send to the LLM.
-            json_schema: Optional JSON schema or Pydantic model for response validation.
+            output_schema: Optional JSON schema or Pydantic model for response validation.
             tools: Optional list of tool schemas.
             temperature: Sampling temperature for the LLM.
             **kwargs: Additional keyword arguments passed to the underlying LLM call.
         """
 
         response = await acompletion(
-            **self._build_kwargs(messages, json_schema, tools, temperature, stream=False, **kwargs)
+            **self._build_kwargs(
+                messages, output_schema, tools, temperature, stream=False, **kwargs
+            )
         )
-        return self._parse_response(response, json_schema=json_schema)
+        return self._parse_response(response, output_schema=output_schema)
 
     async def stream(
         self,
         messages: list[dict[str, Any]],
         *,
-        json_schema: dict[str, Any] | type[BaseModel] | None = None,
+        output_schema: dict[str, Any] | type[BaseModel] | None = None,
         tools: list[dict[str, Any]] | None = None,
         temperature: float | None = None,
         **kwargs: Any,
@@ -337,7 +339,7 @@ class Provider:
         """Stream an LLM response chunk by chunk.
         Args:
             messages: A list of message dicts to send to the LLM.
-            json_schema: Optional JSON schema or Pydantic model for response validation.
+            output_schema: Optional JSON schema or Pydantic model for response validation.
             tools: Optional list of tool schemas.
             temperature: Sampling temperature for the LLM.
             **kwargs: Additional keyword arguments passed to the underlying LLM call.
@@ -347,7 +349,7 @@ class Provider:
             AsyncIterator[Any],
             await acompletion(
                 **self._build_kwargs(
-                    messages, json_schema, tools, temperature, stream=True, **kwargs
+                    messages, output_schema, tools, temperature, stream=True, **kwargs
                 )
             ),
         )
