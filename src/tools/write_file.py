@@ -27,7 +27,7 @@ SCHEMA = {
 }
 
 
-def _write_file_sync(file_path: str, content: str) -> str:
+def _write_file(file_path: str, content: str) -> str:
     """Write content to file, creating parent dirs if needed.
 
     Args:
@@ -55,4 +55,4 @@ async def write_file(file_path: str, content: str) -> str:
     Returns:
         str: success message
     """
-    return await asyncio.to_thread(_write_file_sync, file_path, content)
+    return await asyncio.to_thread(_write_file, file_path, content)

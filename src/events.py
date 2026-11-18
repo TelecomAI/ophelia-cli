@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import TypeAlias, Union
 
 
 @dataclass(frozen=True)
@@ -79,13 +78,13 @@ class Stop:
     text: str
 
 
-Event: TypeAlias = Union[
-    PreToolUse,
-    PermissionRequest,
-    PostToolUse,
-    MessageDisplay,
-    ThinkingDisplay,
-    SubagentStart,
-    SubagentStop,
-    Stop,
-]
+type Event = (
+    PreToolUse
+    | PermissionRequest
+    | PostToolUse
+    | MessageDisplay
+    | ThinkingDisplay
+    | SubagentStart
+    | SubagentStop
+    | Stop
+)

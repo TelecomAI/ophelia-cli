@@ -1,5 +1,6 @@
+from collections.abc import AsyncGenerator
+
 from events import Event
-from typing import AsyncGenerator
 
 # TODO: issue #16 Define the system prompt
 SYSTEM_PROMPT: str = """You are a coding assistant that helps developers with software engineering tasks.
@@ -16,10 +17,9 @@ Be concise and direct in your responses."""
 
 
 class Agent:
-
     def __init__(
         self,
-        provider: Provider,  # TODO: issue #12 Implement the Provider class which standardize llm calls and responses
+        provider: Provider,  # TODO: issue #12 Implement the Provider class which standardize llm calls and responses # type: ignore  # noqa: F821
         tools: dict | None = None,
         system_prompt: str = SYSTEM_PROMPT,
         max_turns: int = 20,
@@ -41,8 +41,7 @@ class Agent:
         self.max_turns = max_turns
         self.history: list[dict] = []
 
-    async def run(self, user_input: str) -> AsyncGenerator[Event]:
+    async def run(self, user_input: str) -> AsyncGenerator[Event]:  # type: ignore
         """
         Run one turn of the agent.
         """
-        pass
