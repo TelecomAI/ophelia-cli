@@ -11,6 +11,7 @@ class PreToolUse:
     emitted before the agent uses a tool
     """
 
+    id: int
     tool_name: str
     args: dict[str, Any]
 
@@ -21,6 +22,7 @@ class PermissionRequest:
     emitted when permission is requested from the user
     """
 
+    id: int
     tool_name: str
     args: dict[str, Any]
 
@@ -31,6 +33,7 @@ class PostToolUse:
     emitted after a tool is used
     """
 
+    id: int
     tool_name: str
     result: str
 
@@ -97,7 +100,9 @@ type Event = (
 class EventHandler:
     """Routes agent events to UI listeners and runs tool calls."""
 
-    def __init__(self, tool_registry: ToolRegistry, listener_registry: ListenerRegistry) -> None:
+    def __init__(
+        self, tool_registry: ToolRegistry, listener_registry: ListenerRegistry
+    ) -> None:
         """Initialize the handler.
 
         Args:
