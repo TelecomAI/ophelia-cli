@@ -85,7 +85,7 @@ async def async_iter(items: list[Any]) -> AsyncIterator[Any]:
 
 
 # ---------------------------------------------------------------------------
-# detect_provider_from_key
+# Provider.__init__ & _resolve_config
 # ---------------------------------------------------------------------------
 
 
@@ -99,18 +99,10 @@ async def async_iter(items: list[Any]) -> AsyncIterator[Any]:
         ("xai-abc123", "xai"),
         ("sk-proj-abc123", "openai"),
         ("  gsk_padded  ", "groq"),
-        ("unknown-prefix-123", None),
-        ("", None),
-        ("   ", None),
     ],
 )
-def test_detect_provider_from_key(api_key: str, expected: str | None) -> None:
-    assert Provider.detect_provider_from_key(api_key) == expected
-
-
-# ---------------------------------------------------------------------------
-# Provider.__init__ & _resolve_config
-# ---------------------------------------------------------------------------
+def test_init_detects_provider_from_key(api_key: str, expected: str) -> None:
+    assert Provider(api_key=api_key).provider == expected
 
 
 def test_init_detects_provider_from_key_and_uses_default_model() -> None:

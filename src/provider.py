@@ -126,7 +126,7 @@ class Provider:
         )
 
     @staticmethod
-    def detect_provider_from_key(api_key: str) -> str | None:
+    def _detect_provider_from_key(api_key: str) -> str | None:
         """Infer the provider slug from well-known API key prefixes."""
         api_key = api_key.strip() if api_key else ""
         if not api_key:
@@ -145,7 +145,7 @@ class Provider:
     ) -> tuple[str, str, str]:
         """Resolve and validate `(provider, normalized_model, api_key)`."""
 
-        clean_provider = provider.strip().lower() if provider and provider.strip() else None
+        clean_provider = (provider.strip().lower() or None) if provider is not None else None
         clean_model = model.strip() if model and model.strip() else None
         clean_api_key = api_key.strip() if api_key is not None else None
 
@@ -154,7 +154,7 @@ class Provider:
 
         resolved_provider = clean_provider
         if not resolved_provider and clean_api_key:
-            resolved_provider = cls.detect_provider_from_key(clean_api_key)
+            resolved_provider = cls._detect_provider_from_key(clean_api_key)
         if not resolved_provider and clean_model and "/" in clean_model:
             resolved_provider = clean_model.split("/", 1)[0].lower()
         if not resolved_provider:
@@ -312,12 +312,21 @@ class Provider:
         **kwargs: Any,
     ) -> ProviderResponse:
         """Perform a single non-streaming LLM call.
+
         Args:
             messages: A list of message dicts to send to the LLM.
-            output_schema: Optional JSON schema or Pydantic model for response validation.
+            output_schema: Optional JSON schema dict or Pydantic model. For nonempty
+                content, dict schemas use local JSON decoding only; Pydantic models
+                also validate the decoded response.
             tools: Optional list of tool schemas.
             temperature: Sampling temperature for the LLM.
             **kwargs: Additional keyword arguments passed to the underlying LLM call.
+
+        Raises:
+            pydantic.ValidationError: Nonempty Pydantic output is invalid JSON or does
+                not validate against the model.
+            json.JSONDecodeError: Nonempty output for a dict schema is invalid JSON,
+                or tool call arguments are invalid JSON.
         """
 
         response = await acompletion(
