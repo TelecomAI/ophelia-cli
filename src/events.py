@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -7,8 +8,9 @@ class PreToolUse:
     emitted before the agent uses a tool
     """
 
+    id: int
     tool_name: str
-    args: str
+    args: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -17,8 +19,9 @@ class PermissionRequest:
     emitted when permission is requested from the user
     """
 
+    id: int
     tool_name: str
-    args: str
+    args: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,7 @@ class PostToolUse:
     emitted after a tool is used
     """
 
+    id: int
     tool_name: str
     result: str
 
