@@ -1,15 +1,17 @@
 import json
 from collections.abc import AsyncGenerator
 
-from provider import Provider, ToolCall
-from events import (
+from src.events import (
     Event,
-    PreToolUse,
     PermissionRequest,
     PostToolUse,
-    ThinkingDisplay,
+    PreToolUse,
     Stop,
+    SubagentStart,
+    SubagentStop,
+    ThinkingDisplay,
 )
+from src.provider import Provider, ToolCall
 
 MAX_TURNS_MESSAGE = "Maximum agent turns reached ({max_turns})."
 
@@ -93,10 +95,8 @@ class Agent:
                 }
 
                 approved: bool = True
-                if self.config is not None and self.config.require_permission(
-                    tool_call.name
-                ):
-                    approved = yield PermissionRequest(**args)
+                if self.config is not None and self.config.require_permission(tool_call.name):
+                    approved = yield PermissionRequest(**args)  # type: ignore
 
                 if approved:
                     result = yield PreToolUse(**args)
@@ -111,12 +111,22 @@ class Agent:
                     }
                 )
 
-                yield PostToolUse(
-                    id=tool_call.id, tool_name=tool_call.name, result=result
-                )
+                yield PostToolUse(id=tool_call.id, tool_name=tool_call.name, result=result)  # type: ignore
 
             if spawn_calls:
-                raise NotImplementedError("spawn agent feature not implemented yet")
+                spawn_results: dict[str, str] = {}
+                # TODO: call the _run_subagents method to execute the spawn_agent calls and collect their results
+
+                for tool_call in spawn_calls:
+                    self.history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": spawn_results.get(
+                                tool_call.id, "Error: sub-agent returned no result."
+                            ),
+                        }
+                    )
 
             if not tool_calls:
                 yield Stop(text=full_content)
@@ -125,3 +135,26 @@ class Agent:
             if turn >= self.max_turns:
                 yield Stop(text=MAX_TURNS_MESSAGE.format(max_turns=self.max_turns))
                 break
+
+    async def _run_subagents(
+        self,
+        spawn_calls: list[ToolCall],
+        results: dict[str, str],
+    ) -> AsyncGenerator[Event]:
+        """Run the ``spawn_agent`` calls and collect one tool result per call.
+
+        Args:
+            spawn_calls (list[ToolCall]): The ``spawn_agent`` calls emitted by
+                the model.
+            results (dict[str, str]): Filled in place with
+                ``tool_call.id -> result text``. ``run()`` uses it to append the
+                matching ``role="tool"`` messages to the history.
+
+        Yields:
+            SubagentStart before a sub-agent starts and SubagentStop when it
+            finishes.
+        """
+        # TODO(spawn-agent): build the child Agent with
+        # get_subagent_tools(self.tools), run it on `task`, and store its
+        # final Stop text in results[tool_call.id]. Run several calls
+        # concurrently with asyncio.gather

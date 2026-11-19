@@ -8,7 +8,7 @@ class PreToolUse:
     emitted before the agent uses a tool
     """
 
-    id: int
+    id: str
     tool_name: str
     args: dict[str, Any]
 
@@ -19,7 +19,7 @@ class PermissionRequest:
     emitted when permission is requested from the user
     """
 
-    id: int
+    id: str
     tool_name: str
     args: dict[str, Any]
 
@@ -30,7 +30,7 @@ class PostToolUse:
     emitted after a tool is used
     """
 
-    id: int
+    id: str
     tool_name: str
     result: str
 
