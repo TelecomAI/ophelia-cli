@@ -74,9 +74,10 @@ class Environment:
 def default_shell() -> str:
     """Return the shell that the run_bash tool runs commands in.
 
-    run_bash uses bash when it finds bash on the PATH (its ``BASH_PATH``). Otherwise
-    ``asyncio.create_subprocess_shell`` falls back to the system's default shell:
-    ``COMSPEC`` (usually ``cmd.exe``) on Windows, and ``/bin/sh`` everywhere else.
+    run_bash uses bash when it finds one (its ``BASH_PATH``; on Windows it looks for
+    Git Bash first). Otherwise ``asyncio.create_subprocess_shell`` falls back to the
+    system's default shell: ``COMSPEC`` (usually ``cmd.exe``) on Windows, and
+    ``/bin/sh`` everywhere else.
     Telling the model which one it gets lets it write commands that actually work, and
     reading ``BASH_PATH`` from the tool itself keeps the two from drifting apart.
     """
