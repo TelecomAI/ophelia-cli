@@ -1,13 +1,18 @@
 import json
 from collections.abc import AsyncGenerator
+from typing import Any
+
+from pydantic import BaseModel, ValidationError
 
 from src.events import (
     Event,
+    InvalidContentSchema,
+    MessageDisplay,
     PermissionRequest,
     PostToolUse,
     PreToolUse,
     Stop,
-    SubagentStart,
+    SubagentStart,  # noqa: F401
     SubagentStop,
     ThinkingDisplay,
 )
@@ -41,11 +46,14 @@ class Agent:
         self.tools = tools or []
         self.system_prompt = system_prompt
         self.max_turns = max_turns
+        self.output_schema: type[BaseModel] | dict[str, Any] | None = (
+            None  # FIXME: Define the output schema for the agent's responses
+        )
         self.history: list[dict] = [
             {"role": "system", "content": self.system_prompt}
         ]  # TODO: possibly forgets ...
 
-    async def run(self, user_input: str) -> AsyncGenerator[Event, str]:
+    async def run(self, user_input: str) -> AsyncGenerator[Event, Any]:
         """
         Run one turn of the agent.
         """
@@ -57,17 +65,30 @@ class Agent:
             turn += 1
             full_content: str = ""
             tool_calls: list[ToolCall] = []
-
             async for chunk in self.provider.stream(
                 messages=self.history,
                 tools=self.tools,
+                output_schema=self.output_schema,
             ):
                 full_content += chunk.content
 
                 if chunk.reasoning:
                     yield ThinkingDisplay(text=chunk.reasoning)
 
+                if chunk.content:
+                    yield MessageDisplay(text=chunk.content)
+
                 tool_calls.extend(chunk.tool_calls)
+            if self.output_schema is not None:
+                try:
+                    if isinstance(self.output_schema, type) and issubclass(
+                        self.output_schema, BaseModel
+                    ):
+                        self.output_schema.model_validate_json(full_content)
+                    elif isinstance(self.output_schema, dict):
+                        json.loads(full_content)
+                except json.JSONDecodeError, ValidationError:
+                    yield InvalidContentSchema(text="Invalid JSON content")
 
             regular_calls = [t for t in tool_calls if t.name != "spawn_agent"]
             spawn_calls = [t for t in tool_calls if t.name == "spawn_agent"]
@@ -96,7 +117,7 @@ class Agent:
 
                 approved: bool = True
                 if self.config is not None and self.config.require_permission(tool_call.name):
-                    approved = bool((yield PermissionRequest(**args)))
+                    approved = yield PermissionRequest(**args)
 
                 if approved:
                     result: str = yield PreToolUse(**args)
@@ -115,11 +136,11 @@ class Agent:
 
             if spawn_calls:
                 spawn_results: dict[str, str] = {}
-                async for event in self._run_subagents(spawn_calls):
-                    if isinstance(event, SubagentStop): 
+                async for event in self._run_subagents(spawn_calls):  # type: ignore
+                    if isinstance(event, SubagentStop):
                         spawn_results[event.id] = event.result
                     yield event
-                    
+
                 for tool_call in spawn_calls:
                     self.history.append(
                         {
@@ -142,7 +163,7 @@ class Agent:
     async def _run_subagents(
         self,
         spawn_calls: list[ToolCall],
-    ) -> AsyncGenerator[Event, str]:
+    ) -> AsyncGenerator[Event, str]:  # type: ignore
         """Run the ``spawn_agent`` calls and collect one tool result per call.
 
         Args:

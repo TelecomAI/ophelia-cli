@@ -48,6 +48,15 @@ class MessageDisplay:
 
 
 @dataclass(frozen=True)
+class InvalidContentSchema:
+    """
+    emitted when the content schema is invalid
+    """
+
+    text: str = ""
+
+
+@dataclass(frozen=True)
 class ThinkingDisplay:
     """
     emitted when the agent is thinking
@@ -96,6 +105,7 @@ type Event = (
     | SubagentStart
     | SubagentStop
     | Stop
+    | InvalidContentSchema
 )
 
 
