@@ -45,7 +45,7 @@ class Agent:
             {"role": "system", "content": self.system_prompt}
         ]  # TODO: possibly forgets ...
 
-    async def run(self, user_input: str) -> AsyncGenerator[Event]:  # type: ignore
+    async def run(self, user_input: str) -> AsyncGenerator[Event, str]:
         """
         Run one turn of the agent.
         """
@@ -96,10 +96,10 @@ class Agent:
 
                 approved: bool = True
                 if self.config is not None and self.config.require_permission(tool_call.name):
-                    approved = yield PermissionRequest(**args)  # type: ignore
+                    approved = bool((yield PermissionRequest(**args)))
 
                 if approved:
-                    result = yield PreToolUse(**args)
+                    result: str = yield PreToolUse(**args)
                 else:
                     result = "Tool call denied by user"
 
@@ -140,7 +140,7 @@ class Agent:
         self,
         spawn_calls: list[ToolCall],
         results: dict[str, str],
-    ) -> AsyncGenerator[Event]:
+    ) -> AsyncGenerator[Event, str]:
         """Run the ``spawn_agent`` calls and collect one tool result per call.
 
         Args:
