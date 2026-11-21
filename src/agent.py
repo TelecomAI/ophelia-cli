@@ -115,8 +115,11 @@ class Agent:
 
             if spawn_calls:
                 spawn_results: dict[str, str] = {}
-                # TODO: call the _run_subagents method to execute the spawn_agent calls and collect their results
-
+                async for event in self._run_subagents(spawn_calls):
+                    if isinstance(event, SubagentStop): 
+                        spawn_results[event.id] = event.result
+                    yield event
+                    
                 for tool_call in spawn_calls:
                     self.history.append(
                         {
@@ -139,7 +142,6 @@ class Agent:
     async def _run_subagents(
         self,
         spawn_calls: list[ToolCall],
-        results: dict[str, str],
     ) -> AsyncGenerator[Event, str]:
         """Run the ``spawn_agent`` calls and collect one tool result per call.
 

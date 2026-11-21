@@ -62,6 +62,7 @@ class SubagentStart:
     emitted when a subagent starts
     """
 
+    id: str
     task: str
     effort: str = "medium"
 
@@ -72,6 +73,7 @@ class SubagentStop:
     emitted when a subagent stops
     """
 
+    id: str
     task: str
     result: str
 
