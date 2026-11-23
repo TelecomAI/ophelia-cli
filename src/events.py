@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -8,7 +9,7 @@ class PreToolUse:
     """
 
     tool_name: str
-    args: str
+    args: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -18,7 +19,7 @@ class PermissionRequest:
     """
 
     tool_name: str
-    args: str
+    args: dict[str, Any]
 
 
 @dataclass(frozen=True)
