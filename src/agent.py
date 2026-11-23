@@ -42,7 +42,6 @@ class Agent:
             raise ValueError("max_turns must be at least 1")
 
         self.provider = provider
-        self.config = None  # FIXME: We should define this ...
         self.tools = tools or []
         self.system_prompt = system_prompt
         self.max_turns = max_turns
@@ -115,12 +114,17 @@ class Agent:
                     "args": tool_call.arguments,
                 }
 
-                approved: bool = True
-                if self.config is not None and self.config.require_permission(tool_call.name):
-                    approved = yield PermissionRequest(**args)
+                # Every regular tool call asks for permission. The caller answers with
+                # a list: [True] approves, anything else (including None) denies.
+                permission_answers = yield PermissionRequest(**args)
+                approved = bool(permission_answers) and all(
+                    answer is True for answer in permission_answers
+                )
 
                 if approved:
-                    result: str = yield PreToolUse(**args)
+                    # The caller runs the tool and answers with [result].
+                    tool_answers = yield PreToolUse(**args)
+                    result: str = tool_answers[0]
                 else:
                     result = "Tool call denied by user"
 

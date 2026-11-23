@@ -68,13 +68,17 @@ async def drive_agent(
     agent: Agent,
     user_input: str,
     *,
-    permission_responses: dict[str, str] | None = None,
+    permission_responses: dict[str, list[Any] | None] | None = None,
     tool_results: dict[str, str] | None = None,
 ) -> list[Event]:
-    """Drive Agent.run() to completion, responding to PermissionRequest and PreToolUse."""
+    """Drive Agent.run() to completion, responding to PermissionRequest and PreToolUse.
+
+    The caller answers PermissionRequest with a list ([True] approves) and PreToolUse
+    with [result], like EventHandler.process does.
+    """
     events: list[Event] = []
     gen = agent.run(user_input)
-    pending_send: str | None = None
+    pending_send: Any = None
 
     while True:
         try:
@@ -85,9 +89,9 @@ async def drive_agent(
         pending_send = None
 
         if isinstance(event, PermissionRequest):
-            pending_send = (permission_responses or {}).get(event.id, "yes")
+            pending_send = (permission_responses or {}).get(event.id, [True])
         elif isinstance(event, PreToolUse):
-            pending_send = (tool_results or {}).get(event.id, "ok")
+            pending_send = [(tool_results or {}).get(event.id, "ok")]
 
     return events
 
@@ -105,7 +109,6 @@ def test_init_sets_defaults_and_system_history() -> None:
     assert agent.system_prompt == "You are helpful."
     assert agent.tools == []
     assert agent.max_turns == 20
-    assert agent.config is None
     assert agent.output_schema is None
     assert agent.history == [{"role": "system", "content": "You are helpful."}]
 
@@ -246,6 +249,7 @@ async def test_run_executes_tool_call_and_continues_next_turn() -> None:
     )
 
     assert events == [
+        PermissionRequest(id="call_1", tool_name="read_file", args={"path": "README.md"}),
         PreToolUse(id="call_1", tool_name="read_file", args={"path": "README.md"}),
         PostToolUse(id="call_1", tool_name="read_file", result="file contents"),
         MessageDisplay(text='{"done": true}'),
@@ -273,7 +277,7 @@ async def test_run_executes_tool_call_and_continues_next_turn() -> None:
     ]
 
 
-async def test_run_permission_approved_and_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_permission_approved_and_denied() -> None:
     call_approved = ToolCall(id="c1", name="write_file", arguments={"path": "a.txt"})
     call_denied = ToolCall(id="c2", name="run_bash", arguments={"command": "rm -rf /"})
     turns = [
@@ -288,14 +292,11 @@ async def test_run_permission_approved_and_denied(monkeypatch: pytest.MonkeyPatc
     ]
     provider = make_mock_provider(turns)
     agent = Agent(provider=provider, system_prompt="sys")
-    config = MagicMock()
-    config.require_permission.side_effect = lambda name: name in {"write_file", "run_bash"}
-    monkeypatch.setattr(agent, "config", config)
 
     events = await drive_agent(
         agent,
         "Do both",
-        permission_responses={"c1": "yes", "c2": ""},
+        permission_responses={"c1": [True], "c2": [False]},
         tool_results={"c1": "written"},
     )
 
@@ -316,9 +317,7 @@ async def test_run_permission_approved_and_denied(monkeypatch: pytest.MonkeyPatc
     ]
 
 
-async def test_run_skips_permission_request_when_config_does_not_require_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_run_always_yields_permission_request_before_pre_tool_use() -> None:
     tool_call = ToolCall(id="c1", name="read_file", arguments={"path": "x.py"})
     turns = [
         [StreamChunk(content='{"ok": 1}', tool_calls=[tool_call], finish_reason="tool_calls")],
@@ -326,15 +325,30 @@ async def test_run_skips_permission_request_when_config_does_not_require_it(
     ]
     provider = make_mock_provider(turns)
     agent = Agent(provider=provider, system_prompt="sys")
-    config = MagicMock()
-    config.require_permission.return_value = False
-    monkeypatch.setattr(agent, "config", config)
 
     events = await drive_agent(agent, "Read", tool_results={"c1": "data"})
 
-    assert not any(isinstance(e, PermissionRequest) for e in events)
-    assert PreToolUse(id="c1", tool_name="read_file", args={"path": "x.py"}) in events
-    config.require_permission.assert_called_once_with("read_file")
+    permission_index = events.index(
+        PermissionRequest(id="c1", tool_name="read_file", args={"path": "x.py"})
+    )
+    assert events[permission_index + 1] == PreToolUse(
+        id="c1", tool_name="read_file", args={"path": "x.py"}
+    )
+
+
+async def test_run_denies_tool_when_permission_answer_is_none() -> None:
+    tool_call = ToolCall(id="c1", name="write_file", arguments={"path": "a.txt"})
+    turns = [
+        [StreamChunk(content="", tool_calls=[tool_call], finish_reason="tool_calls")],
+        [StreamChunk(content='{"done": true}', finish_reason="stop")],
+    ]
+    provider = make_mock_provider(turns)
+    agent = Agent(provider=provider, system_prompt="sys")
+
+    events = await drive_agent(agent, "Write", permission_responses={"c1": None})
+
+    assert not any(isinstance(e, PreToolUse) for e in events)
+    assert PostToolUse(id="c1", tool_name="write_file", result="Tool call denied by user") in events
 
 
 # ---------------------------------------------------------------------------
