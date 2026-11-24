@@ -112,9 +112,7 @@ type Event = (
 class EventHandler:
     """Routes agent events to UI listeners and runs tool calls."""
 
-    def __init__(
-        self, tool_registry: ToolRegistry, listener_registry: ListenerRegistry
-    ) -> None:
+    def __init__(self, tool_registry: ToolRegistry, listener_registry: ListenerRegistry) -> None:
         """Initialize the handler.
 
         Args:

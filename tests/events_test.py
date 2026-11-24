@@ -33,7 +33,9 @@ async def test_permission_request_returns_true_without_asking_when_not_required(
 
     listeners.register(PermissionRequest, on_permission_request)
 
-    result = await handler.process(PermissionRequest(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(
+        PermissionRequest(id="call_1", tool_name="echo", args={"text": "hi"})
+    )
 
     assert result == [True]
     assert asked == []
@@ -47,7 +49,9 @@ async def test_permission_request_returns_listener_approval():
 
     listeners.register(PermissionRequest, approve)
 
-    result = await handler.process(PermissionRequest(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(
+        PermissionRequest(id="call_1", tool_name="echo", args={"text": "hi"})
+    )
 
     assert result == [True]
 
@@ -60,7 +64,9 @@ async def test_permission_request_returns_listener_refusal():
 
     listeners.register(PermissionRequest, refuse)
 
-    result = await handler.process(PermissionRequest(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(
+        PermissionRequest(id="call_1", tool_name="echo", args={"text": "hi"})
+    )
 
     assert result == [False]
 
@@ -68,7 +74,9 @@ async def test_permission_request_returns_listener_refusal():
 async def test_permission_request_returns_none_when_no_listener_is_registered():
     handler, _ = _handler(permission_for=["echo"])
 
-    result = await handler.process(PermissionRequest(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(
+        PermissionRequest(id="call_1", tool_name="echo", args={"text": "hi"})
+    )
 
     assert result is None
 
@@ -81,7 +89,9 @@ async def test_permission_request_returns_none_when_listener_returns_none():
 
     listeners.register(PermissionRequest, unimplemented)
 
-    result = await handler.process(PermissionRequest(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(
+        PermissionRequest(id="call_1", tool_name="echo", args={"text": "hi"})
+    )
 
     assert result is None
 
@@ -92,7 +102,7 @@ async def test_permission_request_returns_none_when_listener_returns_none():
 async def test_pre_tool_use_runs_tool_and_returns_its_result():
     handler, _ = _handler()
 
-    result = await handler.process(PreToolUse(tool_name="echo", args={"text": "hi"}))
+    result = await handler.process(PreToolUse(id="call_2", tool_name="echo", args={"text": "hi"}))
 
     assert result == ["echo: hi"]
 
@@ -111,7 +121,7 @@ async def test_pre_tool_use_notifies_listeners_before_running_tool():
     listeners.register(PreToolUse, on_pre_tool_use)
     handler.tool_registry.register(_schema("spy"), echo_spy)
 
-    await handler.process(PreToolUse(tool_name="spy", args={"text": "hi"}))
+    await handler.process(PreToolUse(id="call_3", tool_name="spy", args={"text": "hi"}))
 
     assert order == ["listener", "tool"]
 
@@ -119,7 +129,7 @@ async def test_pre_tool_use_notifies_listeners_before_running_tool():
 async def test_pre_tool_use_returns_error_string_for_unknown_tool():
     handler, _ = _handler()
 
-    result = await handler.process(PreToolUse(tool_name="missing", args={}))
+    result = await handler.process(PreToolUse(id="call_4", tool_name="missing", args={}))
 
     assert result == ["Error: unknown tool 'missing'"]
 
@@ -154,4 +164,4 @@ async def test_other_event_returns_none_when_all_listeners_return_none():
 async def test_other_event_returns_none_when_no_listener_is_registered():
     handler, _ = _handler()
 
-    assert await handler.process(PostToolUse(tool_name="echo", result="x")) is None
+    assert await handler.process(PostToolUse(id="call_5", tool_name="echo", result="x")) is None
