@@ -33,7 +33,9 @@ TOOL_GUIDELINES_DIR = PROMPT_DIR / "tools"
 # This stops a name like "../secrets" from reading a file outside the tools folder.
 _TOOL_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
-SYSTEM_PROMPT: str = (PROMPT_DIR / "system_prompt.md").read_text(encoding="utf-8").strip()
+SYSTEM_PROMPT: str = (
+    (PROMPT_DIR / "system_prompt.md").read_text(encoding="utf-8").strip()
+)
 """The main instructions only, without tool guidelines or the Environment section.
 
 Agents should use ``build_system_prompt`` instead, which adds both.
@@ -98,7 +100,9 @@ def tool_guidelines(tool_name: str) -> str | None:
     return path.read_text(encoding="utf-8").strip()
 
 
-def build_system_prompt(tool_names: Iterable[str], environment: Environment | None = None) -> str:
+def build_system_prompt(
+    tool_names: Iterable[str], environment: Environment | None = None
+) -> str:
     """Assemble the full system prompt for an agent that has the given tools.
 
     Args:

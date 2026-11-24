@@ -16,6 +16,8 @@ from src.events import (
     SubagentStop,
     ThinkingDisplay,
 )
+
+from src.prompts import build_system_prompt, Environment
 from src.provider import Provider, ToolCall
 
 MAX_TURNS_MESSAGE = "Maximum agent turns reached ({max_turns})."
@@ -25,8 +27,7 @@ class Agent:
     def __init__(
         self,
         provider: Provider,
-        system_prompt: str,
-        tools: list[dict] | None = None,
+        tools: list[dict] | None = None,  # TODO: Check the compatibiliy between calls
         max_turns: int = 20,
     ) -> None:
         """Initialize the agent.
@@ -43,14 +44,18 @@ class Agent:
 
         self.provider = provider
         self.tools = tools or []
-        self.system_prompt = system_prompt
-        self.max_turns = max_turns
-        self.output_schema: type[BaseModel] | dict[str, Any] | None = (
-            None  # FIXME: Define the output schema for the agent's responses
+
+        # NOTE: Make sure that tools have the intended structure
+        self.system_prompt = build_system_prompt(
+            tool_names=[tool["function"]["name"] for tool in tools],
+            environment=Environment.detect(),
         )
+
+        self.max_turns = max_turns
+        self.output_schema: type[BaseModel] | dict[str, Any] | None = None
         self.history: list[dict] = [
             {"role": "system", "content": self.system_prompt}
-        ]  # TODO: possibly forgets ...
+        ]  # TODO: possibly forgets first message after a long session
 
     async def run(self, user_input: str) -> AsyncGenerator[Event, Any]:
         """
