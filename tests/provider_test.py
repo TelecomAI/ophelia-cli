@@ -162,6 +162,124 @@ def test_init_supports_custom_provider_with_env_fallback(
     assert provider.api_key == "ollama-token"
 
 
+# ---------------------------------------------------------------------------
+# OpenAI-style keys, which are shared by OpenAI compatible services (issue #32)
+# ---------------------------------------------------------------------------
+
+
+def test_init_explicit_provider_wins_over_openai_style_key() -> None:
+    provider = Provider(api_key="sk-shared", provider="mistral", model="mistral-small-latest")
+
+    assert provider.provider == "mistral"
+    assert provider.model == "mistral/mistral-small-latest"
+
+
+def test_init_model_prefix_wins_over_openai_style_key() -> None:
+    provider = Provider(api_key="sk-shared", model="anthropic/claude-sonnet-4-5")
+
+    assert provider.provider == "anthropic"
+    assert provider.model == "anthropic/claude-sonnet-4-5"
+
+
+def test_init_model_prefix_wins_over_openai_style_key_for_unprefixed_model() -> None:
+    provider = Provider(api_key="gsk_test", model="openai/gpt-oss-20b")
+
+    assert provider.provider == "groq"
+    assert provider.model == "groq/openai/gpt-oss-20b"
+
+
+def test_init_unambiguous_key_prefix_still_wins_over_model_prefix() -> None:
+    provider = Provider(api_key="sk-ant-key", model="openai/gpt-4o")
+
+    assert provider.provider == "anthropic"
+    assert provider.model == "anthropic/openai/gpt-4o"
+
+
+def test_init_openai_style_key_still_defaults_to_openai_as_last_resort() -> None:
+    provider = Provider(api_key="sk-proj-abc123")
+
+    assert provider.provider == "openai"
+    assert provider.model == "openai/gpt-4o-mini"
+
+
+def test_init_openai_style_key_is_not_used_when_provider_env_var_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MISTRAL_API_KEY", "mistral-secret")
+    provider = Provider(model="mistral-small-latest")
+
+    assert provider.provider == "mistral"
+    assert provider.api_key == "mistral-secret"
+
+
+# ---------------------------------------------------------------------------
+# Rezel, an OpenAI compatible gateway
+# ---------------------------------------------------------------------------
+
+
+def test_init_rezel_reads_key_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("REZEL_API_KEY", "sk-rezel")
+    provider = Provider()
+
+    assert provider.provider == "rezel"
+    assert provider.model == "openai/rezel/latest"
+    assert provider.api_key == "sk-rezel"
+    assert provider.base_url == "https://ia.rezel.net/api"
+
+
+def test_init_rezel_resolves_provider_from_env_var_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REZEL_API_KEY", "sk-rezel")
+    provider = Provider(model="qwen3-8-27b")
+
+    assert provider.provider == "rezel"
+    assert provider.model == "openai/qwen3-8-27b"
+
+
+def test_init_rezel_accepts_openai_style_key_without_provider_flag() -> None:
+    provider = Provider(api_key="sk-rezel", model="rezel/latest")
+
+    assert provider.provider == "rezel"
+    assert provider.model == "openai/rezel/latest"
+    assert provider.base_url == "https://ia.rezel.net/api"
+
+
+def test_init_rezel_dispatches_through_openai_litellm_provider() -> None:
+    provider = Provider(api_key="sk-rezel", provider="rezel", model="qwen3-8-27b")
+
+    assert provider.provider == "rezel"
+    assert provider.model == "openai/qwen3-8-27b"
+
+
+def test_init_rezel_does_not_double_prefix_litellm_qualified_model() -> None:
+    provider = Provider(api_key="sk-rezel", provider="rezel", model="openai/qwen3-8-27b")
+
+    assert provider.model == "openai/qwen3-8-27b"
+
+
+def test_init_rezel_allows_base_url_override() -> None:
+    provider = Provider(api_key="sk-rezel", provider="rezel", base_url="http://localhost:9000/v1")
+
+    assert provider.provider == "rezel"
+    assert provider.base_url == "http://localhost:9000/v1"
+
+
+async def test_complete_forwards_rezel_base_url_to_litellm() -> None:
+    provider = Provider(api_key="sk-rezel", provider="rezel", model="qwen3-8-27b")
+
+    with patch(
+        "src.provider.acompletion",
+        new=AsyncMock(return_value=make_completion_response(content="ok")),
+    ) as mock_acomp:
+        await provider.complete([{"role": "user", "content": "hi"}])
+
+    call_kwargs = mock_acomp.call_args.kwargs
+    assert call_kwargs["model"] == "openai/qwen3-8-27b"
+    assert call_kwargs["base_url"] == "https://ia.rezel.net/api"
+    assert call_kwargs["api_key"] == "sk-rezel"
+
+
 @pytest.mark.parametrize("bad_key", ["", "   "])
 def test_init_rejects_empty_api_key(bad_key: str) -> None:
     with pytest.raises(ValueError, match="api_key cannot be empty"):

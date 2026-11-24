@@ -21,6 +21,12 @@ class ProviderConfig:
 
     env_var: str
     default_model: str
+    # Endpoint used when the caller passes no `base_url`, for gateways and
+    # OpenAI-compatible services that do not live at api.openai.com.
+    base_url: str | None = None
+    # Provider LiteLLM dispatches to when it differs from the config key, as
+    # LiteLLM only routes to providers it knows. Defaults to the config key.
+    litellm_provider: str | None = None
 
 
 # the default schema is: <provider>/<model>
@@ -53,17 +59,27 @@ PROVIDER_CONFIGS: dict[str, ProviderConfig] = {
         env_var="XAI_API_KEY",
         default_model="xai/grok-3-mini",
     ),
+    "rezel": ProviderConfig(
+        env_var="REZEL_API_KEY",
+        default_model="rezel/latest",
+        base_url="https://ia.rezel.net/api",
+        litellm_provider="openai",
+    ),
 }
 
-# check for API key prefixes to detect provider
+# API key prefixes that identify a provider on their own
 API_KEY_PREFIXES: tuple[tuple[str, str], ...] = (
     ("sk-ant-", "anthropic"),
     ("sk-or-", "openrouter"),
     ("gsk_", "groq"),
     ("AIza", "gemini"),
     ("xai-", "xai"),
-    ("sk-", "openai"),  # supposing any other "sk-" prefix belongs to OpenAI
 )
+
+# OpenAI-style keys are also issued by OpenAI-compatible services (Rezel, vLLM,
+# LiteLLM proxies, ...), so they only point at OpenAI once no other signal, such
+# as an explicit `provider` or a provider-qualified `model`, is available.
+OPENAI_STYLE_KEY_PREFIX = "sk-"
 
 
 @dataclass(frozen=True)
@@ -115,19 +131,21 @@ class Provider:
                    If None, uses the detected provider's default model
             provider: Explicit provider name (needed when key has no known prefix
                       and model has no "<provider>/" prefix, e.g. Mistral)
-            base_url: Optional custom endpoint URL (for local proxy / Ollama)
+            base_url: Optional custom endpoint URL (for local proxy / Ollama).
+                      Defaults to the provider's configured `base_url`, if any
         """
         load_dotenv()
-        self.base_url = base_url
         self.provider, self.model, self.api_key = self._resolve_config(
             api_key=api_key,
             model=model,
             provider=provider,
         )
+        config = PROVIDER_CONFIGS.get(self.provider)
+        self.base_url = base_url if base_url is not None else (config.base_url if config else None)
 
     @staticmethod
     def _detect_provider_from_key(api_key: str) -> str | None:
-        """Infer the provider slug from well-known API key prefixes."""
+        """Infer the provider slug from unambiguous API key prefixes."""
         api_key = api_key.strip() if api_key else ""
         if not api_key:
             return None
@@ -135,6 +153,11 @@ class Provider:
             if api_key.startswith(prefix):
                 return provider
         return None
+
+    @staticmethod
+    def _is_openai_style_key(api_key: str) -> bool:
+        """Whether the key uses the format shared by OpenAI and compatible APIs."""
+        return api_key.strip().startswith(OPENAI_STYLE_KEY_PREFIX)
 
     @classmethod
     def _resolve_config(
@@ -157,6 +180,8 @@ class Provider:
             resolved_provider = cls._detect_provider_from_key(clean_api_key)
         if not resolved_provider and clean_model and "/" in clean_model:
             resolved_provider = clean_model.split("/", 1)[0].lower()
+        if not resolved_provider and clean_api_key and cls._is_openai_style_key(clean_api_key):
+            resolved_provider = "openai"
         if not resolved_provider:
             for key_provider, config in PROVIDER_CONFIGS.items():
                 if os.environ.get(config.env_var, "").strip():
@@ -188,11 +213,17 @@ class Provider:
                     f"No default model configured for provider {resolved_provider!r}; "
                     "please specify `model`."
                 )
-            normalized_model = config.default_model
-        elif clean_model.lower().startswith(f"{resolved_provider}/"):
-            normalized_model = clean_model
+            base_model = config.default_model
         else:
-            normalized_model = f"{resolved_provider}/{clean_model}"
+            base_model = clean_model
+
+        # LiteLLM only routes to providers it knows, which is not always the
+        # config key: Rezel, for instance, is an OpenAI-compatible gateway.
+        litellm_prefix = (config.litellm_provider if config else None) or resolved_provider
+        if base_model.lower().startswith(f"{litellm_prefix}/"):
+            normalized_model = base_model
+        else:
+            normalized_model = f"{litellm_prefix}/{base_model}"
 
         return resolved_provider, normalized_model, resolved_api_key
 
