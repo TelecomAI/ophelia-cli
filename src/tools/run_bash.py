@@ -79,21 +79,29 @@ USES_WSL = BASH_PATH is not None and _is_wsl_launcher(BASH_PATH)
 """True when ``BASH_PATH`` is the Windows launcher for a Linux bash in WSL."""
 
 
+def _is_absolute_drive_path(drive: str, rest: str) -> bool:
+    """True for ``C:\\work`` and ``C:/work``, False for ``C:work`` and shares."""
+    return len(drive) == 2 and drive[1] == ":" and rest.startswith(("\\", "/"))
+
+
 def shell_path(path: str) -> str:
     """Return ``path`` the way the shell that ``run_bash`` starts sees it.
 
     A bash from WSL is a Linux shell, and Linux sees the ``C:`` drive as
-    ``/mnt/c``, so ``C:\\work`` is ``/mnt/c/work``. Other shells see the path
-    unchanged.
+    ``/mnt/c``, so ``C:\\work`` is ``/mnt/c/work``. Git Bash on Windows is a
+    Windows program whose shell would eat the backslashes, so it gets
+    ``C:/work`` instead. Other shells see the path unchanged.
     """
-    if not USES_WSL:
+    drive, rest = ntpath.splitdrive(path)
+    if not _is_absolute_drive_path(drive, rest):
+        # Relative paths, drive-relative paths, and network shares are left alone.
         return path
 
-    drive, rest = ntpath.splitdrive(path)
-    if len(drive) != 2 or drive[1] != ":":
-        # Relative paths and network shares are left alone.
-        return path
-    return f"/mnt/{drive[0].lower()}{rest.replace('\\', '/')}"
+    if USES_WSL:
+        return f"/mnt/{drive[0].lower()}{rest.replace('\\', '/')}"
+    if _IS_WINDOWS and BASH_PATH:
+        return (drive + rest).replace("\\", "/")
+    return path
 
 
 @dataclass(frozen=True)

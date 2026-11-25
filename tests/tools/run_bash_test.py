@@ -511,10 +511,35 @@ def test_shell_path_leaves_paths_bash_cannot_translate(
 
     assert run_bash_module.shell_path("/home/dev") == "/home/dev"
     assert run_bash_module.shell_path("relative\\path") == "relative\\path"
+    assert run_bash_module.shell_path("C:work") == "C:work"
+    assert run_bash_module.shell_path("C:") == "C:"
     assert run_bash_module.shell_path("\\\\server\\share\\file") == "\\\\server\\share\\file"
 
 
-def test_shell_path_changes_nothing_without_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_shell_path_uses_forward_slashes_for_git_bash(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Git Bash is a Windows program: C:/work works, while bash eats the backslashes.
+    monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(run_bash_module, "BASH_PATH", r"C:\Program Files\Git\bin\bash.exe")
+    monkeypatch.setattr(run_bash_module, "USES_WSL", False)
+
+    assert run_bash_module.shell_path("C:\\work\\project") == "C:/work/project"
+    assert run_bash_module.shell_path("C:work") == "C:work"
+
+
+def test_shell_path_changes_nothing_on_posix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", False)
+    monkeypatch.setattr(run_bash_module, "BASH_PATH", "/usr/bin/bash")
+    monkeypatch.setattr(run_bash_module, "USES_WSL", False)
+
+    assert run_bash_module.shell_path("/home/dev/work") == "/home/dev/work"
+
+
+def test_shell_path_changes_nothing_on_windows_without_bash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # cmd.exe reads C:\work as it is; only a shell that needs a translation gets one.
+    monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(run_bash_module, "BASH_PATH", None)
     monkeypatch.setattr(run_bash_module, "USES_WSL", False)
 
     assert run_bash_module.shell_path("C:\\work") == "C:\\work"

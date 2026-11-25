@@ -113,7 +113,9 @@ def test_environment_render_lists_every_detail() -> None:
 def test_detect_describes_the_current_machine() -> None:
     environment = Environment.detect()
 
-    assert environment.working_directory == str(Path.cwd())
+    # The directory is reported the way run_bash's shell reads it, which is not
+    # str(Path.cwd()) on Windows: C:/work for Git Bash, /mnt/c/work for WSL.
+    assert environment.working_directory == run_bash_tool.shell_path(str(Path.cwd()))
     assert environment.date == datetime.date.today().isoformat()
     assert environment.shell == default_shell()
     assert environment.operating_system
