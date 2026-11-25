@@ -10,12 +10,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.tools import ToolRegistry
 from src.tools import run_bash as run_bash_module
 from src.tools.run_bash import run_bash
 
 
 def expected_report(cmd: str, exit_code: int, stdout: str, stderr: str) -> str:
     return f"Command: {cmd!r}\nExit code: {exit_code}\n\nSTDOUT:\n{stdout}\n\nSTDERR:\n{stderr}\n"
+
+
+def test_schema_registers_with_the_tool_registry() -> None:
+    # The registry only accepts the OpenAI schema format that every other tool uses.
+    registry = ToolRegistry()
+
+    registry.register(run_bash_module.SCHEMA, run_bash)
+
+    assert registry.get_schemas() == [run_bash_module.SCHEMA]
+    assert run_bash_module.SCHEMA["function"]["name"] == "run_bash"
 
 
 async def assert_process_terminated(pid: int) -> None:
