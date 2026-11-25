@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import ctypes
+import inspect
 import os
 import shlex
 import signal
@@ -122,11 +123,29 @@ async def test_run_bash_returns_no_command_message_for_empty_command() -> None:
     assert await run_bash("") == "No command is given"
 
 
-@pytest.mark.parametrize("timeout", [-1, 1.5, "1"])
+@pytest.mark.parametrize("timeout", [-1, 0, 1.5, "1", True])
 @pytest.mark.asyncio
 async def test_run_bash_rejects_invalid_timeout(timeout: object) -> None:
     with pytest.raises(ValueError, match="timeout parameter"):
         await run_bash("printf 'should not run'", timeout=timeout)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_run_bash_rejects_a_timeout_above_the_maximum() -> None:
+    # A model that thinks in milliseconds asks for 10_000 and would otherwise wait hours.
+    with pytest.raises(ValueError, match=f"at most {run_bash_module.MAX_TIMEOUT}"):
+        await run_bash("printf 'should not run'", timeout=run_bash_module.MAX_TIMEOUT + 1)
+
+
+def test_schema_defaults_match_the_function_defaults() -> None:
+    # The model is told the schema's defaults, so they must be the ones the tool uses.
+    properties = run_bash_module.SCHEMA["function"]["parameters"]["properties"]
+    signature = inspect.signature(run_bash).parameters
+
+    assert properties["timeout"]["default"] == signature["timeout"].default
+    assert properties["timeout"]["default"] == run_bash_module.DEFAULT_TIMEOUT
+    assert properties["max_output"]["default"] == signature["max_output"].default
+    assert properties["max_output"]["default"] == run_bash_module.DEFAULT_MAX_OUTPUT
 
 
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
@@ -134,6 +153,17 @@ async def test_run_bash_rejects_invalid_timeout(timeout: object) -> None:
 async def test_run_bash_reports_timeout() -> None:
     with pytest.raises(TimeoutError, match="timed out after 1 seconds"):
         await run_bash("sleep 2", timeout=1)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="uses /dev/zero")
+@pytest.mark.asyncio
+async def test_run_bash_keeps_a_normal_test_log_without_truncation() -> None:
+    # A test or build log of a few thousand characters must survive the default.
+    cmd = "head -c 6000 /dev/zero | tr '\\0' 'x'"
+    result = await run_bash(cmd)
+    stdout = result.split("STDOUT:\n", 1)[1].split("\n\nSTDERR:", 1)[0]
+
+    assert len(stdout) == 6000
 
 
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
@@ -654,7 +684,7 @@ async def test_run_bash_cancellation_bounds_pipe_drain_when_descendant_cleanup_f
     fake_transport.close.assert_called_once()
 
 
-@pytest.mark.parametrize("max_output", [0, -1, 1.5, "1"])
+@pytest.mark.parametrize("max_output", [0, -1, 1.5, "1", True])
 @pytest.mark.asyncio
 async def test_run_bash_rejects_invalid_max_output(max_output: object) -> None:
     with pytest.raises(ValueError, match="max_output parameter"):

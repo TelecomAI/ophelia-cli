@@ -505,6 +505,12 @@ async def _drain_process(proc: Any, *, tree_killed: bool) -> None:
 Run bash commands
 """
 
+DEFAULT_TIMEOUT = 30
+DEFAULT_MAX_OUTPUT = 8000
+# Long enough for a slow build, short enough that a mistake in the units can't
+# keep a command running for hours.
+MAX_TIMEOUT = 3600
+
 SCHEMA = {
     "type": "function",
     "function": {
@@ -519,13 +525,17 @@ SCHEMA = {
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout in seconds. Defaults to 30.",
-                    "default": 30,
+                    "description": (
+                        f"Timeout in seconds. Defaults to {DEFAULT_TIMEOUT}; at most {MAX_TIMEOUT}."
+                    ),
+                    "default": DEFAULT_TIMEOUT,
                 },
                 "max_output": {
                     "type": "integer",
-                    "description": "Max output length in characters, defaults to 2000.",
-                    "default": 2000,
+                    "description": (
+                        f"Max output length in characters. Defaults to {DEFAULT_MAX_OUTPUT}."
+                    ),
+                    "default": DEFAULT_MAX_OUTPUT,
                 },
             },
             "required": ["command"],
@@ -534,13 +544,30 @@ SCHEMA = {
 }
 
 
-async def run_bash(command: str, timeout: int = 30, max_output: int = 2000) -> str:
+def _positive_int(name: str, value: object) -> int:
+    """Return `value` as a positive int, or raise ValueError naming `name`.
+
+    ``bool`` is rejected explicitly because it is a subclass of ``int``, so
+    ``timeout=True`` would otherwise pass as 1.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"The {name} parameter of run_bash tool must be a positive integer")
+    return value
+
+
+async def run_bash(
+    command: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    max_output: int = DEFAULT_MAX_OUTPUT,
+) -> str:
     """Run a bash command with a timeout and return combined stdout/stderr of max_output length."""
 
-    if not isinstance(timeout, int) or timeout <= 0:
-        raise ValueError("The timeout parameter of run_bash tool must be a positive integer")
-    if not isinstance(max_output, int) or max_output <= 0:
-        raise ValueError("The max_output parameter of run_bash tool must be a positive integer")
+    timeout = _positive_int("timeout", timeout)
+    if timeout > MAX_TIMEOUT:
+        raise ValueError(
+            f"The timeout parameter of run_bash tool must be at most {MAX_TIMEOUT} seconds"
+        )
+    max_output = _positive_int("max_output", max_output)
 
     if not command or not command.strip():
         return "No command is given"
