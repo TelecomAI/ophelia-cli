@@ -83,13 +83,14 @@ async def drive_agent(
     *,
     permission_responses: dict[str, list[Any] | None] | None = None,
     tool_results: dict[str, str] | None = None,
-    effort: str | None = None,
+    effort: str = "medium",
     stream: bool = True,
 ) -> list[Event]:
     """Drive Agent.run() to completion, responding to PermissionRequest and PreToolUse.
 
     The caller answers PermissionRequest with a list ([True] approves) and PreToolUse
-    with [result], like EventHandler.process does.
+    with [result], like EventHandler.process does. Effort is required by Agent.run()
+    and defaults to "medium" here since the agent has no effort of its own.
     """
     events: list[Event] = []
     gen = agent.run(user_input, effort=effort, stream=stream)
@@ -124,7 +125,6 @@ def test_init_sets_defaults_and_system_history() -> None:
     assert agent.system_prompt.startswith(SYSTEM_PROMPT)
     assert agent.tools == []
     assert agent.max_turns == 20
-    assert agent.effort == "medium"
     assert agent.output_schema is None
     assert agent.history == [{"role": "system", "content": agent.system_prompt}]
 
@@ -132,11 +132,10 @@ def test_init_sets_defaults_and_system_history() -> None:
 def test_init_accepts_custom_tools_and_max_turns() -> None:
     provider = make_mock_provider([])
     tools = [{"type": "function", "function": {"name": "read_file"}}]
-    agent = Agent(provider=provider, tools=tools, max_turns=5, effort="high")
+    agent = Agent(provider=provider, tools=tools, max_turns=5)
 
     assert agent.tools == tools
     assert agent.max_turns == 5
-    assert agent.effort == "high"
 
 
 @pytest.mark.parametrize("max_turns", [0, -1, -10])
@@ -144,13 +143,6 @@ def test_init_rejects_non_positive_max_turns(max_turns: int) -> None:
     provider = make_mock_provider([])
     with pytest.raises(ValueError, match="max_turns must be at least 1"):
         Agent(provider=provider, max_turns=max_turns)
-
-
-@pytest.mark.parametrize("effort", ["", "LOW", "High", "max", "none"])
-def test_init_rejects_invalid_effort(effort: str) -> None:
-    provider = make_mock_provider([])
-    with pytest.raises(ValueError, match="effort must be one of"):
-        Agent(provider=provider, effort=effort)
 
 
 # ---------------------------------------------------------------------------
@@ -187,20 +179,11 @@ async def test_run_streams_thinking_and_message_events_and_stops() -> None:
     assert call_kwargs["reasoning_effort"] == "medium"
 
 
-async def test_run_effort_override_applies_to_this_run_only() -> None:
-    provider = make_mock_provider([[StreamChunk(content="ok", finish_reason="stop")]])
-    agent = Agent(provider=provider, effort="low")
-
-    await drive_agent(agent, "think hard", effort="high")
-
-    assert provider.stream.call_args.kwargs["reasoning_effort"] == "high"
-    assert agent.effort == "low"
-
-
-async def test_run_rejects_invalid_effort_override() -> None:
+@pytest.mark.parametrize("effort", [None, "", "LOW", "High", "max", "none"])
+async def test_run_rejects_missing_or_invalid_effort(effort: str | None) -> None:
     provider = make_mock_provider([])
     agent = Agent(provider=provider)
-    gen = agent.run("hi", effort="max")
+    gen = agent.run("hi", effort=effort)
 
     with pytest.raises(ValueError, match="effort must be one of"):
         await gen.asend(None)
@@ -341,16 +324,6 @@ async def test_run_non_streaming_emits_no_message_for_empty_content() -> None:
     events = await drive_agent(agent, "hi", stream=False)
 
     assert events == [Stop(text="")]
-
-
-async def test_run_non_streaming_applies_effort_override() -> None:
-    provider = make_complete_provider([ProviderResponse(content="ok", model="m")])
-    agent = Agent(provider=provider, effort="low")
-
-    await drive_agent(agent, "hi", effort="high", stream=False)
-
-    assert provider.complete.call_args.kwargs["reasoning_effort"] == "high"
-    assert agent.effort == "low"
 
 
 # ---------------------------------------------------------------------------

@@ -22,11 +22,9 @@ from src.provider import Provider, ToolCall
 from src.tools.spawn_agent import VALID_EFFORTS, get_subagent_tools, validate_spawn_agent_args
 
 MAX_TURNS_MESSAGE = "Maximum agent turns reached ({max_turns})."
+SUBAGENT_TOOL_ERROR = "Error: sub-agents cannot execute tools"
 
-# Answer for sub-agent tool calls when the Agent has no tool executor.
-SUBAGENT_TOOL_ERROR = "Error: sub-agents cannot execute tools yet."
 
-# Runs one tool call: ``executor(tool_name, args)`` returns the result text.
 ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[str]]
 
 
@@ -62,8 +60,6 @@ class Agent:
         provider: Provider,
         tools: list[dict] | None = None,  # TODO: Check the compatibiliy between calls
         max_turns: int = 20,
-        *,
-        effort: str = "medium",
         tool_executor: ToolExecutor | None = None,
     ) -> None:
         """Initialize the agent.
@@ -73,8 +69,6 @@ class Agent:
                 from the tool schemas and the detected environment.
             tools (list[dict], optional): Tool schemas sent to the provider.
             max_turns (int, optional): Max number of turns. Defaults to 20.
-            effort (str, optional): Reasoning effort used by default on every run
-                ('low', 'medium', or 'high'). Defaults to "medium".
             tool_executor (ToolExecutor, optional): Callable executed as
                 ``tool_executor(tool_name, args)`` that returns a tool's result
                 text. Used to run sub-agent tool calls. When None, sub-agent tool
@@ -83,8 +77,6 @@ class Agent:
 
         if max_turns < 1:
             raise ValueError("max_turns must be at least 1")
-        if effort not in VALID_EFFORTS:
-            raise ValueError(f"effort must be one of {VALID_EFFORTS}")
 
         self.provider = provider
         self.tools = tools or []
@@ -97,7 +89,6 @@ class Agent:
             environment=Environment.detect(),
         )
         self.max_turns = max_turns
-        self.effort = effort
         self.tool_executor = tool_executor
         self.output_schema: type[BaseModel] | dict[str, Any] | None = None
         self.history: list[dict] = [
@@ -123,10 +114,8 @@ class Agent:
                 Defaults to True.
         """
 
-        if effort is not None and effort not in VALID_EFFORTS:
+        if effort is None or effort not in VALID_EFFORTS:
             raise ValueError(f"effort must be one of {VALID_EFFORTS}")
-
-        run_effort = self.effort if effort is None else effort
 
         self.history.append({"role": "user", "content": user_input})
 
@@ -140,7 +129,7 @@ class Agent:
                     messages=self.history,
                     tools=self.tools,
                     output_schema=self.output_schema,
-                    reasoning_effort=run_effort,
+                    reasoning_effort=effort,
                 ):
                     full_content += chunk.content
 
@@ -156,7 +145,7 @@ class Agent:
                     messages=self.history,
                     tools=self.tools,
                     output_schema=self.output_schema,
-                    reasoning_effort=run_effort,
+                    reasoning_effort=effort,
                 )
                 full_content = response.content
                 tool_calls = list(response.tool_calls)
