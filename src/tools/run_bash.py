@@ -552,7 +552,7 @@ def _format_partial_output(stdout: bytes, stderr: bytes) -> str:
 
 
 """
-Run bash commands
+Run shell commands
 """
 
 DEFAULT_TIMEOUT = 30
@@ -565,13 +565,13 @@ SCHEMA = {
     "type": "function",
     "function": {
         "name": "run_bash",
-        "description": "Run a bash command and return the output.",
+        "description": "Run a shell command and return the output.",
         "parameters": {
             "type": "object",
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The bash command to execute.",
+                    "description": "The shell command to execute.",
                 },
                 "timeout": {
                     "type": "integer",
@@ -630,7 +630,7 @@ async def run_bash(
     timeout: int = DEFAULT_TIMEOUT,
     max_output: int = DEFAULT_MAX_OUTPUT,
 ) -> str:
-    """Run a bash command with a timeout and return combined stdout/stderr of max_output length."""
+    """Run a shell command with a timeout and return combined stdout/stderr of max_output length."""
 
     timeout = _positive_int("timeout", timeout)
     if timeout > MAX_TIMEOUT:
