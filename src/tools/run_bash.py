@@ -506,27 +506,30 @@ Run bash commands
 """
 
 SCHEMA = {
-    "name": "run_bash",
-    "description": "Run a bash command and return the output.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "The bash command to execute.",
+    "type": "function",
+    "function": {
+        "name": "run_bash",
+        "description": "Run a bash command and return the output.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The bash command to execute.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in seconds. Defaults to 30.",
+                    "default": 30,
+                },
+                "max_output": {
+                    "type": "integer",
+                    "description": "Max output length in characters, defaults to 2000.",
+                    "default": 2000,
+                },
             },
-            "timeout": {
-                "type": "integer",
-                "description": "Timeout in seconds. Defaults to 30.",
-                "default": 30,
-            },
-            "max_output": {
-                "type": "integer",
-                "description": "Max output length in characters, defaults to 2000.",
-                "default": 2000,
-            },
+            "required": ["command"],
         },
-        "required": ["command"],
     },
 }
 
