@@ -168,13 +168,53 @@ async def test_run_bash_keeps_a_normal_test_log_without_truncation() -> None:
 
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
+async def test_run_bash_timeout_includes_the_output_printed_so_far() -> None:
+    # A hanging test suite is exactly when its output explains what hung.
+    with pytest.raises(TimeoutError) as error:
+        await run_bash("printf 'partial stdout'; printf 'partial stderr' >&2; sleep 10", timeout=1)
+
+    assert "timed out after 1 seconds" in str(error.value)
+    assert "Output before the timeout" in str(error.value)
+    assert "partial stdout" in str(error.value)
+    assert "partial stderr" in str(error.value)
+
+
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
+@pytest.mark.asyncio
+async def test_run_bash_timeout_without_output_has_no_output_section() -> None:
+    with pytest.raises(TimeoutError, match="timed out after 1 seconds$"):
+        await run_bash("sleep 10", timeout=1)
+
+
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
+@pytest.mark.asyncio
 async def test_run_bash_truncates_long_report() -> None:
     cmd = "printf 'abcdefghij'"
     max_output = 40
     result = await run_bash(cmd, max_output=max_output)
-    full_report = expected_report(cmd, 0, "abcdefghij", "")
 
-    assert result == full_report[:max_output] + "\n [TRUNCATED]"
+    # The start says which command ran, the end holds the output and the exit.
+    assert len(result) == max_output
+    assert result.startswith("Command:")
+    assert result.endswith("STDERR:\n\n")
+    assert run_bash_module._TRUNCATION_MARKER in result
+
+
+def test_truncate_returns_short_text_unchanged() -> None:
+    text = "short output"
+
+    assert run_bash_module._truncate(text, len(text)) == text
+
+
+def test_truncate_keeps_the_error_at_the_end() -> None:
+    text = "collected 40 items\n" + "noise " * 500 + "FAILED test_app.py::test_login"
+
+    result = run_bash_module._truncate(text, 200)
+
+    assert len(result) == 200
+    assert result.startswith("collected 40 items")
+    assert result.endswith("FAILED test_app.py::test_login")
+    assert run_bash_module._TRUNCATION_MARKER in result
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")
