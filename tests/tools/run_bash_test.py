@@ -155,6 +155,17 @@ async def test_run_bash_reports_timeout() -> None:
         await run_bash("sleep 2", timeout=1)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses /dev/zero")
+@pytest.mark.asyncio
+async def test_run_bash_keeps_a_normal_test_log_without_truncation() -> None:
+    # A test or build log of a few thousand characters must survive the default.
+    cmd = "head -c 6000 /dev/zero | tr '\\0' 'x'"
+    result = await run_bash(cmd)
+    stdout = result.split("STDOUT:\n", 1)[1].split("\n\nSTDERR:", 1)[0]
+
+    assert len(stdout) == 6000
+
+
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
 async def test_run_bash_truncates_long_report() -> None:

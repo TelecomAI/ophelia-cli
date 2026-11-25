@@ -506,7 +506,7 @@ Run bash commands
 """
 
 DEFAULT_TIMEOUT = 30
-DEFAULT_MAX_OUTPUT = 2000
+DEFAULT_MAX_OUTPUT = 8000
 # Long enough for a slow build, short enough that a mistake in the units can't
 # keep a command running for hours.
 MAX_TIMEOUT = 3600
