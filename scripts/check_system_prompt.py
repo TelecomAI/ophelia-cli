@@ -24,46 +24,13 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 from src.prompts import build_system_prompt
+from src.tools.edit_file import SCHEMA as EDIT_FILE_SCHEMA
+from src.tools.read_file import SCHEMA as READ_FILE_SCHEMA
 from src.tools.run_bash import SCHEMA as RUN_BASH_SCHEMA
+from src.tools.write_file import SCHEMA as WRITE_FILE_SCHEMA
 
-# Only run_bash is on dev so far. These schemas mirror the parameters planned for the
-# other file tools (issues #3, #4 and #7), so the model sees the whole tool set.
-OTHER_TOOL_SCHEMAS = [
-    {
-        "name": "read_file",
-        "description": "Read a file and return its contents.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"file_path": {"type": "string", "description": "File to read."}},
-            "required": ["file_path"],
-        },
-    },
-    {
-        "name": "write_file",
-        "description": "Write content to a file, replacing it if it exists.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file_path": {"type": "string", "description": "File to write."},
-                "content": {"type": "string", "description": "The complete new content."},
-            },
-            "required": ["file_path", "content"],
-        },
-    },
-    {
-        "name": "edit_file",
-        "description": "Replace old_string with new_string in a file. old_string must be unique.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file_path": {"type": "string", "description": "File to edit."},
-                "old_string": {"type": "string", "description": "Exact text to replace."},
-                "new_string": {"type": "string", "description": "Text to put in its place."},
-            },
-            "required": ["file_path", "old_string", "new_string"],
-        },
-    },
-]
+# The real schemas, so the model sees the same tools the agent gives it.
+TOOLS = [RUN_BASH_SCHEMA, READ_FILE_SCHEMA, WRITE_FILE_SCHEMA, EDIT_FILE_SCHEMA]
 
 LOOKING_TOOLS = {"read_file", "run_bash"}
 
@@ -168,18 +135,6 @@ SCENARIOS = [
 ]
 
 
-def to_api_tool(schema: dict) -> dict:
-    """Convert a tool SCHEMA to the format of OpenAI-compatible chat APIs."""
-    return {
-        "type": "function",
-        "function": {
-            "name": schema["name"],
-            "description": schema["description"],
-            "parameters": schema["input_schema"],
-        },
-    }
-
-
 def chat(base_url: str, api_key: str, model: str, messages: list[dict], tools: list) -> dict:
     """Send one chat request and return the model's reply, waiting if rate limited."""
     body = json.dumps({"model": model, "messages": messages, "tools": tools}).encode()
@@ -228,7 +183,7 @@ def main() -> int:
         print(f"Set {args.api_key_env} in your environment or in .env first.")
         return 2
 
-    tools = [to_api_tool(schema) for schema in [RUN_BASH_SCHEMA, *OTHER_TOOL_SCHEMAS]]
+    tools = TOOLS
     system_prompt = build_system_prompt(tool["function"]["name"] for tool in tools)
     print(f"Model: {args.model}, system prompt: {len(system_prompt.split())} words\n")
 
