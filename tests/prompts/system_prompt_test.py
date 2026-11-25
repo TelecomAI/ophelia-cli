@@ -12,6 +12,7 @@ from src.prompts import (
     default_shell,
     tool_guidelines,
 )
+from src.prompts import system_prompt as system_prompt_module
 from src.tools import run_bash as run_bash_tool
 
 # The tools Ophelia has or is about to get. Each of them needs a guidelines file.
@@ -25,10 +26,21 @@ ENVIRONMENT = Environment(
 )
 
 
+def guideline_tool_names() -> set[str]:
+    """The tools that have a guidelines file, taken from the folder itself."""
+    return {path.stem for path in system_prompt_module.TOOL_GUIDELINES_DIR.glob("*.md")}
+
+
+def test_guidelines_folder_matches_the_known_tools() -> None:
+    # A new guidelines file must also appear in KNOWN_TOOLS, which the other tests loop
+    # over, or it would go unchecked.
+    assert guideline_tool_names() == set(KNOWN_TOOLS)
+
+
 def test_main_prompt_names_no_tools() -> None:
     # Tool names only enter the prompt through the guidelines of tools the agent has.
     # The old placeholder described tools that didn't exist, which invites bad calls.
-    for name in KNOWN_TOOLS:
+    for name in guideline_tool_names():
         assert name not in SYSTEM_PROMPT
 
 
