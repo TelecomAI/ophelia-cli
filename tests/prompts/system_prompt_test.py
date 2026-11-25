@@ -113,7 +113,9 @@ def test_environment_render_lists_every_detail() -> None:
 def test_detect_describes_the_current_machine() -> None:
     environment = Environment.detect()
 
-    assert environment.working_directory == str(Path.cwd())
+    # The directory is reported the way run_bash's shell reads it, which is not
+    # str(Path.cwd()) on Windows: C:/work for Git Bash, /mnt/c/work for WSL.
+    assert environment.working_directory == run_bash_tool.shell_path(str(Path.cwd()))
     assert environment.date == datetime.date.today().isoformat()
     assert environment.shell == default_shell()
     assert environment.operating_system
@@ -121,26 +123,22 @@ def test_detect_describes_the_current_machine() -> None:
 
 def test_default_shell_is_bash_when_run_bash_finds_it(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(run_bash_tool, "BASH_PATH", "/usr/bin/bash")
+    monkeypatch.setattr(run_bash_tool, "USES_WSL", False)
 
-    assert default_shell() == "/usr/bin/bash"
+    assert default_shell() == "bash"
 
 
-def test_default_shell_on_windows_without_bash_is_comspec(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_default_shell_names_a_wsl_bash(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Under WSL the model has to use /mnt/c paths, so the label says so.
+    monkeypatch.setattr(run_bash_tool, "BASH_PATH", "C:\\Windows\\System32\\bash.exe")
+    monkeypatch.setattr(run_bash_tool, "USES_WSL", True)
+
+    assert default_shell() == "bash (WSL)"
+
+
+def test_default_shell_on_windows_without_bash_is_cmd(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
     monkeypatch.setattr(os, "name", "nt")
-    monkeypatch.setenv("COMSPEC", "C:\\Windows\\system32\\cmd.exe")
-
-    assert default_shell() == "C:\\Windows\\system32\\cmd.exe"
-
-
-def test_default_shell_on_windows_without_bash_or_comspec(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
-    monkeypatch.setattr(os, "name", "nt")
-    monkeypatch.delenv("COMSPEC", raising=False)
 
     assert default_shell() == "cmd.exe"
 
@@ -149,7 +147,15 @@ def test_default_shell_elsewhere_without_bash_is_sh(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(run_bash_tool, "BASH_PATH", None)
     monkeypatch.setattr(os, "name", "posix")
 
-    assert default_shell() == "/bin/sh"
+    assert default_shell() == "sh"
+
+
+def test_environment_working_directory_uses_the_shell_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(run_bash_tool, "shell_path", lambda _path: "/mnt/c/work")
+
+    assert Environment.detect().working_directory == "/mnt/c/work"
 
 
 def test_prompt_stays_within_its_size_budget() -> None:

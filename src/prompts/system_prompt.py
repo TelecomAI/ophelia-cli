@@ -42,7 +42,11 @@ Agents should use ``build_system_prompt`` instead, which adds both.
 
 @dataclass(frozen=True)
 class Environment:
-    """Facts about the user's machine that the model can't know on its own."""
+    """Facts about the user's machine that the model can't know on its own.
+
+    ``working_directory`` is written the way the shell sees it: under WSL, ``C:\\work``
+    is ``/mnt/c/work``, which is the path the model has to use in commands.
+    """
 
     working_directory: str
     operating_system: str
@@ -53,7 +57,7 @@ class Environment:
     def detect(cls) -> Self:
         """Describe the machine Ophelia is running on right now."""
         return cls(
-            working_directory=str(Path.cwd()),
+            working_directory=run_bash_tool.shell_path(str(Path.cwd())),
             operating_system=f"{platform.system()} {platform.release()}".strip(),
             shell=default_shell(),
             date=datetime.date.today().isoformat(),
@@ -72,20 +76,22 @@ class Environment:
 
 
 def default_shell() -> str:
-    """Return the shell that the run_bash tool runs commands in.
+    """Return a short name for the shell that the run_bash tool runs commands in.
 
     run_bash uses bash when it finds one (its ``BASH_PATH``; on Windows it looks for
-    Git Bash first). Otherwise ``asyncio.create_subprocess_shell`` falls back to the
-    system's default shell: ``COMSPEC`` (usually ``cmd.exe``) on Windows, and
-    ``/bin/sh`` everywhere else.
-    Telling the model which one it gets lets it write commands that actually work, and
-    reading ``BASH_PATH`` from the tool itself keeps the two from drifting apart.
+    Git Bash first, and falls back to the WSL launcher). Otherwise
+    ``asyncio.create_subprocess_shell`` falls back to the system's default shell:
+    ``cmd.exe`` on Windows, and ``/bin/sh`` everywhere else. On most Linux systems
+    that ``sh`` is dash, which lacks some bash syntax.
+
+    The model needs the name, not the path: it says which syntax and which commands
+    work. Reading the facts from the tool itself keeps the two from drifting apart.
     """
     if run_bash_tool.BASH_PATH:
-        return run_bash_tool.BASH_PATH
+        return "bash (WSL)" if run_bash_tool.USES_WSL else "bash"
     if os.name == "nt":
-        return os.environ.get("COMSPEC", "cmd.exe")
-    return "/bin/sh"
+        return "cmd.exe"
+    return "sh"
 
 
 def tool_guidelines(tool_name: str) -> str | None:
