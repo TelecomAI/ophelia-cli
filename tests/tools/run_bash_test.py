@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import ctypes
+import inspect
 import os
 import shlex
 import signal
@@ -127,6 +128,17 @@ async def test_run_bash_returns_no_command_message_for_empty_command() -> None:
 async def test_run_bash_rejects_invalid_timeout(timeout: object) -> None:
     with pytest.raises(ValueError, match="timeout parameter"):
         await run_bash("printf 'should not run'", timeout=timeout)  # type: ignore[arg-type]
+
+
+def test_schema_defaults_match_the_function_defaults() -> None:
+    # The model is told the schema's defaults, so they must be the ones the tool uses.
+    properties = run_bash_module.SCHEMA["function"]["parameters"]["properties"]
+    signature = inspect.signature(run_bash).parameters
+
+    assert properties["timeout"]["default"] == signature["timeout"].default
+    assert properties["timeout"]["default"] == run_bash_module.DEFAULT_TIMEOUT
+    assert properties["max_output"]["default"] == signature["max_output"].default
+    assert properties["max_output"]["default"] == run_bash_module.DEFAULT_MAX_OUTPUT
 
 
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")

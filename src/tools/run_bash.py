@@ -505,6 +505,9 @@ async def _drain_process(proc: Any, *, tree_killed: bool) -> None:
 Run bash commands
 """
 
+DEFAULT_TIMEOUT = 30
+DEFAULT_MAX_OUTPUT = 2000
+
 SCHEMA = {
     "type": "function",
     "function": {
@@ -519,13 +522,15 @@ SCHEMA = {
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout in seconds. Defaults to 30.",
-                    "default": 30,
+                    "description": f"Timeout in seconds. Defaults to {DEFAULT_TIMEOUT}.",
+                    "default": DEFAULT_TIMEOUT,
                 },
                 "max_output": {
                     "type": "integer",
-                    "description": "Max output length in characters, defaults to 2000.",
-                    "default": 2000,
+                    "description": (
+                        f"Max output length in characters. Defaults to {DEFAULT_MAX_OUTPUT}."
+                    ),
+                    "default": DEFAULT_MAX_OUTPUT,
                 },
             },
             "required": ["command"],
@@ -534,7 +539,11 @@ SCHEMA = {
 }
 
 
-async def run_bash(command: str, timeout: int = 30, max_output: int = 2000) -> str:
+async def run_bash(
+    command: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    max_output: int = DEFAULT_MAX_OUTPUT,
+) -> str:
     """Run a bash command with a timeout and return combined stdout/stderr of max_output length."""
 
     if not isinstance(timeout, int) or timeout <= 0:
