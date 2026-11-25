@@ -49,6 +49,13 @@ def test_each_known_tool_has_guidelines(tool: str) -> None:
     assert text.startswith(f"## {tool}\n")
 
 
+@pytest.mark.parametrize("shell", ["bash", "bash (WSL)", "sh", "cmd.exe"])
+def test_run_bash_guidelines_cover_every_shell(shell: str) -> None:
+    # These are the shells default_shell() can report; each needs advice about
+    # which syntax and commands work.
+    assert f"`{shell}`" in (tool_guidelines("run_bash") or "")
+
+
 @pytest.mark.parametrize("tool", KNOWN_TOOLS)
 def test_prompt_only_mentions_the_tools_it_is_given(tool: str) -> None:
     prompt = build_system_prompt([tool], ENVIRONMENT)
