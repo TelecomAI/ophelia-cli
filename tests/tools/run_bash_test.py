@@ -172,9 +172,29 @@ async def test_run_bash_truncates_long_report() -> None:
     cmd = "printf 'abcdefghij'"
     max_output = 40
     result = await run_bash(cmd, max_output=max_output)
-    full_report = expected_report(cmd, 0, "abcdefghij", "")
 
-    assert result == full_report[:max_output] + "\n [TRUNCATED]"
+    # The start says which command ran, the end holds the output and the exit.
+    assert len(result) == max_output
+    assert result.startswith("Command:")
+    assert result.endswith("STDERR:\n\n")
+    assert run_bash_module._TRUNCATION_MARKER in result
+
+
+def test_truncate_returns_short_text_unchanged() -> None:
+    text = "short output"
+
+    assert run_bash_module._truncate(text, len(text)) == text
+
+
+def test_truncate_keeps_the_error_at_the_end() -> None:
+    text = "collected 40 items\n" + "noise " * 500 + "FAILED test_app.py::test_login"
+
+    result = run_bash_module._truncate(text, 200)
+
+    assert len(result) == 200
+    assert result.startswith("collected 40 items")
+    assert result.endswith("FAILED test_app.py::test_login")
+    assert run_bash_module._TRUNCATION_MARKER in result
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX bash PIDs and os.kill(..., 0)")

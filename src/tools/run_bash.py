@@ -544,6 +544,26 @@ SCHEMA = {
 }
 
 
+_TRUNCATION_MARKER = "\n\n[... TRUNCATED ...]\n\n"
+
+
+def _truncate(text: str, max_length: int) -> str:
+    """Cut `text` to `max_length` characters, keeping its start and its end.
+
+    Errors and test failures are usually in the last lines, so keeping only the
+    start would hide the useful part of the output.
+    """
+    if len(text) <= max_length:
+        return text
+    if max_length <= len(_TRUNCATION_MARKER):
+        return text[:max_length]
+
+    budget = max_length - len(_TRUNCATION_MARKER)
+    head = budget // 2
+    tail = budget - head
+    return text[:head] + _TRUNCATION_MARKER + text[-tail:]
+
+
 def _positive_int(name: str, value: object) -> int:
     """Return `value` as a positive int, or raise ValueError naming `name`.
 
@@ -630,9 +650,7 @@ async def run_bash(
         f"{stderr.decode('utf-8', errors='replace')}\n"
     )
 
-    if len(result) > max_output:
-        return result[:max_output] + "\n [TRUNCATED]"
-    return result
+    return _truncate(result, max_output)
 
 
 if __name__ == "__main__":
