@@ -168,6 +168,26 @@ async def test_run_bash_keeps_a_normal_test_log_without_truncation() -> None:
 
 @pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
 @pytest.mark.asyncio
+async def test_run_bash_timeout_includes_the_output_printed_so_far() -> None:
+    # A hanging test suite is exactly when its output explains what hung.
+    with pytest.raises(TimeoutError) as error:
+        await run_bash("printf 'partial stdout'; printf 'partial stderr' >&2; sleep 10", timeout=1)
+
+    assert "timed out after 1 seconds" in str(error.value)
+    assert "Output before the timeout" in str(error.value)
+    assert "partial stdout" in str(error.value)
+    assert "partial stderr" in str(error.value)
+
+
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
+@pytest.mark.asyncio
+async def test_run_bash_timeout_without_output_has_no_output_section() -> None:
+    with pytest.raises(TimeoutError, match="timed out after 1 seconds$"):
+        await run_bash("sleep 10", timeout=1)
+
+
+@pytest.mark.skipif(run_bash_module.BASH_PATH is None, reason="bash is not installed")
+@pytest.mark.asyncio
 async def test_run_bash_truncates_long_report() -> None:
     cmd = "printf 'abcdefghij'"
     max_output = 40

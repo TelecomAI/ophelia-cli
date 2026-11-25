@@ -488,17 +488,40 @@ async def _kill_process_tree(
     return True
 
 
-async def _drain_process(proc: Any, *, tree_killed: bool) -> None:
-    """Drain subprocess pipes after termination without hanging on leaked descendant handles."""
+async def _drain_process(
+    communication: asyncio.Future[tuple[bytes, bytes]],
+    proc: Any,
+    *,
+    tree_killed: bool,
+) -> tuple[bytes, bytes]:
+    """Wait for the pipe reader to finish after termination without hanging.
+
+    The reader collects everything the process printed, including the output from
+    before it was killed. Returns empty bytes when the pipes could not be drained
+    in time, which happens when a leaked descendant keeps them open.
+    """
     drain_timeout = _PIPE_DRAIN_TIMEOUT if tree_killed else _FALLBACK_DRAIN_TIMEOUT
     try:
-        await asyncio.wait_for(proc.communicate(), timeout=drain_timeout)
+        # Shielded so a slow drain leaves the reader alive until we cancel it below.
+        return await asyncio.wait_for(asyncio.shield(communication), timeout=drain_timeout)
     except TimeoutError:
+        communication.cancel()
         transport = getattr(proc, "_transport", None)
         if transport is not None:
             transport.close()
         with contextlib.suppress(TimeoutError, ProcessLookupError):
             await asyncio.wait_for(proc.wait(), timeout=_FALLBACK_DRAIN_TIMEOUT)
+        return b"", b""
+
+
+def _format_partial_output(stdout: bytes, stderr: bytes) -> str:
+    """Format what a timed-out command managed to print before it was killed."""
+    sections = []
+    if stdout:
+        sections.append("STDOUT:\n" + stdout.decode("utf-8", errors="replace"))
+    if stderr:
+        sections.append("STDERR:\n" + stderr.decode("utf-8", errors="replace"))
+    return "\n\n".join(sections)
 
 
 """
@@ -616,6 +639,12 @@ async def run_bash(
     job_handle: int | None = None
     proc_start_time: int | None = None
     completed = False
+    timed_out = False
+    partial_stdout = b""
+    partial_stderr = b""
+    # Reading in a separate task keeps the output when the wait times out: cancelling
+    # communicate() would close the pipes and lose what the process already printed.
+    communication = asyncio.ensure_future(proc.communicate())
     try:
         if _IS_WINDOWS:
             proc_start_time = _get_windows_process_creation_time(proc.pid)
@@ -623,23 +652,33 @@ async def run_bash(
             if not _resume_windows_process(proc.pid):
                 raise OSError(f"Failed to resume suspended Windows process {proc.pid}")
 
-        # this can throw a TimeoutError
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        completed = True
-
-    except TimeoutError as exc:
-        # we re-throw the error, cause the error catching logic must be handled elsewhere
-        raise TimeoutError(f"Command {command!r} timed out after {timeout} seconds") from exc
+        done, _ = await asyncio.wait({communication}, timeout=timeout)
+        if communication in done:
+            stdout, stderr = communication.result()
+            completed = True
+        else:
+            timed_out = True
     finally:
         try:
             if not completed:
                 tree_killed = await _kill_process_tree(proc.pid, job_handle, proc_start_time)
-                await _drain_process(proc, tree_killed=tree_killed)
+                partial_stdout, partial_stderr = await _drain_process(
+                    communication, proc, tree_killed=tree_killed
+                )
         finally:
             if job_handle is not None and _IS_WINDOWS:
                 win32 = _get_win32()
                 if win32 is not None:
                     win32.kernel32.CloseHandle(job_handle)
+
+    if timed_out:
+        # The caller handles this error; the output printed before the kill is the
+        # only clue about where the command hung, so it goes in the message.
+        message = f"Command {command!r} timed out after {timeout} seconds"
+        partial = _format_partial_output(partial_stdout, partial_stderr)
+        if partial:
+            message += f"\n\nOutput before the timeout:\n{_truncate(partial, max_output)}"
+        raise TimeoutError(message)
 
     result = (
         f"Command: {command!r}\n"
