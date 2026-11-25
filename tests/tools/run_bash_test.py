@@ -481,6 +481,45 @@ def test_find_bash_prefers_git_bash_over_wsl_on_windows(
     assert run_bash_module._find_bash() == str(git_bash)
 
 
+def test_find_bash_uses_the_wsl_launcher_when_it_is_the_only_bash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The WSL launcher is a real bash, so it is still better than cmd.exe.
+    wsl_bash = r"C:\Users\dev\AppData\Local\Microsoft\WindowsApps\bash.exe"
+
+    monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        run_bash_module.shutil, "which", lambda name: wsl_bash if name == "bash" else None
+    )
+
+    assert run_bash_module._find_bash() == wsl_bash
+
+
+def test_shell_path_translates_windows_paths_for_wsl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(run_bash_module, "USES_WSL", True)
+
+    assert run_bash_module.shell_path("C:\\work\\project") == "/mnt/c/work/project"
+    assert run_bash_module.shell_path("D:\\") == "/mnt/d/"
+
+
+def test_shell_path_leaves_paths_bash_cannot_translate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(run_bash_module, "USES_WSL", True)
+
+    assert run_bash_module.shell_path("/home/dev") == "/home/dev"
+    assert run_bash_module.shell_path("relative\\path") == "relative\\path"
+    assert run_bash_module.shell_path("\\\\server\\share\\file") == "\\\\server\\share\\file"
+
+
+def test_shell_path_changes_nothing_without_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_bash_module, "USES_WSL", False)
+
+    assert run_bash_module.shell_path("C:\\work") == "C:\\work"
+
+
 @pytest.mark.asyncio
 async def test_run_bash_uses_exec_with_dash_c_when_bash_found(
     monkeypatch: pytest.MonkeyPatch,

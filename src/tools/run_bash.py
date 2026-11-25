@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import ctypes
+import ntpath
 import os
 import shutil
 import signal
@@ -68,13 +69,31 @@ def _find_bash() -> str | None:
         if candidate.is_file():
             return str(candidate)
 
-    which_bash = shutil.which("bash")
-    if which_bash and not _is_wsl_launcher(which_bash):
-        return which_bash
-    return which_bash
+    # Last resort: the WSL launcher is a real bash. USES_WSL reports it, and
+    # shell_path() translates Windows paths for it.
+    return shutil.which("bash")
 
 
 BASH_PATH = _find_bash()
+USES_WSL = BASH_PATH is not None and _is_wsl_launcher(BASH_PATH)
+"""True when ``BASH_PATH`` is the Windows launcher for a Linux bash in WSL."""
+
+
+def shell_path(path: str) -> str:
+    """Return ``path`` the way the shell that ``run_bash`` starts sees it.
+
+    A bash from WSL is a Linux shell, and Linux sees the ``C:`` drive as
+    ``/mnt/c``, so ``C:\\work`` is ``/mnt/c/work``. Other shells see the path
+    unchanged.
+    """
+    if not USES_WSL:
+        return path
+
+    drive, rest = ntpath.splitdrive(path)
+    if len(drive) != 2 or drive[1] != ":":
+        # Relative paths and network shares are left alone.
+        return path
+    return f"/mnt/{drive[0].lower()}{rest.replace('\\', '/')}"
 
 
 @dataclass(frozen=True)
