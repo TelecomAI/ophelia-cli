@@ -488,6 +488,8 @@ def test_find_bash_uses_the_wsl_launcher_when_it_is_the_only_bash(
     wsl_bash = r"C:\Users\dev\AppData\Local\Microsoft\WindowsApps\bash.exe"
 
     monkeypatch.setattr(run_bash_module, "_IS_WINDOWS", True)
+    # Ignore Git Bash installs that happen to exist on the machine running the test.
+    monkeypatch.setattr(run_bash_module.os, "environ", {})
     monkeypatch.setattr(
         run_bash_module.shutil, "which", lambda name: wsl_bash if name == "bash" else None
     )
